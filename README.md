@@ -18,7 +18,9 @@ say "3pm Thursday is free" and then actually hold it are not.
 | Availability engine (3 layers, precedence, DST, multi-timezone) | ✅ built, 26 assertions passing |
 | Holds, bookings, cancellation | ✅ built, concurrency proven |
 | REST API (`/v1`) with key auth + idempotency | ✅ availability, holds, bookings |
-| Conversation layer (agent loop, snapshots, channels) | ⬜ next |
+| Conversation layer — capability-assembled tools, snapshots, guardrails | ✅ built, 30 assertions passing |
+| Agent loop against the live model | ⚠️ written, unverified — needs `ANTHROPIC_API_KEY` |
+| Channel adapters (WhatsApp, web) | ⬜ next |
 | Connectors (brokered capabilities) | ⬜ next |
 | Admin UI | ⬜ next |
 
@@ -51,12 +53,20 @@ curl localhost:3000/api/health
 # {"status":"ok","checks":{"database":"ok",
 #  "tenantIsolation":"enforced","overlapConstraint":"present"}}
 
-npx dotenv -e .env.local -- npx tsx scripts/proveEngine.ts
+npm run prove          # both harnesses
 ```
 
-`proveEngine.ts` is the real specification: exception precedence, category scoping,
-buffer enforcement, per-location timezones, DST-skipped wall-clock times, and five
-concurrent customers racing for one slot.
+`proveEngine.ts` is the engine's real specification: exception precedence, category
+scoping, buffer enforcement, per-location timezones, DST-skipped wall-clock times, and
+five concurrent customers racing for one slot.
+
+`proveConversation.ts` covers the conversation layer **without calling a model**. Every
+tool exposes a plain `run()`, so the dangerous half — the part that reads customer data,
+quotes prices and can double-book a room — is verified deterministically, for free, in
+CI. It asserts that revoking a capability removes the corresponding tool, that a
+non-quotable price never enters the model's context at all, that an internal closure
+reason never escapes, that a lost race returns alternatives, and that escalation actually
+persists `botPaused` rather than merely reporting success.
 
 ## API
 
