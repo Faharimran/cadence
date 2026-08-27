@@ -153,6 +153,12 @@ export async function getAvailability(
         ...(q.resourceId ? { id: q.resourceId } : {}),
         locations: { some: { locationId: location.id } },
       },
+      // Deterministic order so requirement matching picks the same resources for
+      // the same query every time. Without it Postgres may return rows in any
+      // order, two concurrent callers can be assigned different resources for
+      // the same slot, and the resulting write order varies — see the sort in
+      // holdSlot() for why that matters.
+      orderBy: { id: "asc" },
     });
     if (resources.length === 0) continue;
     sawAnyResource = true;

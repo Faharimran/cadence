@@ -86,7 +86,19 @@ export async function holdSlot(db: TenantDb, req: HoldRequest): Promise<HeldBook
         holdExpiresAt: expiresAt,
         source: req.source ?? "api",
         resources: {
-          create: slot.resourceIds.map((resourceId) => ({
+          // Sorted, and this is load-bearing rather than tidiness.
+          //
+          // A service occupying several resources inserts one row per resource,
+          // each taking a lock the exclusion constraint enforces. If two
+          // concurrent bookings acquire those locks in OPPOSITE orders — A takes
+          // the stylist and waits for the suite, B takes the suite and waits for
+          // the stylist — Postgres detects a deadlock and kills one at random
+          // (SQLSTATE 40P01). Ordering every writer identically makes that
+          // cycle impossible to form.
+          //
+          // The failure is timing-dependent, so it passes tests and appears in
+          // production. Do not remove this sort.
+          create: [...slot.resourceIds].sort().map((resourceId) => ({
             tenantId: req.tenantId,
             resourceId,
             // The buffered interval — this is what the exclusion constraint

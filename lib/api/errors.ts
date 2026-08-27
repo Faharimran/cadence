@@ -88,6 +88,8 @@ export class CadenceError extends Error {
 /** Postgres error codes we translate into recoverable domain errors. */
 const PG_EXCLUSION_VIOLATION = "23P01";
 const PG_UNIQUE_VIOLATION = "23505";
+const PG_DEADLOCK_DETECTED = "40P01";
+const PG_SERIALIZATION_FAILURE = "40001";
 
 /**
  * Turns the exclusion-constraint violation raised by the database's
@@ -125,6 +127,26 @@ export function translateDatabaseError(err: unknown): CadenceError | null {
   }
   if (code === PG_UNIQUE_VIOLATION || code === "P2002") {
     return new CadenceError("slot_unavailable", "That time is no longer available.");
+  }
+
+  // A deadlock or serialization failure means a concurrent writer touched the
+  // same rows — the transaction was rolled back and nothing was committed.
+  // Surfacing that as a 500 would be both alarming and wrong: no data is
+  // damaged, and simply trying again usually succeeds. Reported as recoverable
+  // so callers retry or take an alternative rather than escalating.
+  //
+  // Ordering writes deterministically (see holdSlot) should make deadlocks
+  // unreachable; this stays as a safety net, not as the primary defence.
+  if (
+    code === PG_DEADLOCK_DETECTED ||
+    code === PG_SERIALIZATION_FAILURE ||
+    message.includes(PG_DEADLOCK_DETECTED) ||
+    message.includes("deadlock detected")
+  ) {
+    return new CadenceError(
+      "slot_unavailable",
+      "That time was being booked by someone else — please try again.",
+    );
   }
   return null;
 }
