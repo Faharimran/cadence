@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+/* ───────────────────────────────────────────────────────────────────────
+   cadence tokens.
+   Cool blue-slate neutrals with a signal-blue accent. The four state hues
+   (open / blocked / override / busy) are SEMANTIC and deliberately separate
+   from the accent — they carry meaning in the schedule grid, so they must
+   not be reused for decoration.
+   ─────────────────────────────────────────────────────────────────────── */
+:root {
+  --paper: #f2f5f8;
+  --surface: #ffffff;
+  --surface-2: #e7ecf2;
+  --rule: #c8d2de;
+  --ink: #16202b;
+  --ink-2: #4a5a6b;
+  --ink-3: #7488a0;
+  --accent: #2563c9;
+  --ok: #1f8a5f;
+  --warn: #b4700f;
+  --bad: #b4453c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0e141b;
+    --surface: #151e28;
+    --surface-2: #1d2833;
+    --rule: #2e3d4c;
+    --ink: #e4ebf2;
+    --ink-2: #a2b2c4;
+    --ink-3: #6f8298;
+    --accent: #6fa0f0;
+    --ok: #57c696;
+    --warn: #e0a44a;
+    --bad: #e58880;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-rule: var(--rule);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+}
+
+html,
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
