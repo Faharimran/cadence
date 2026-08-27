@@ -1,0 +1,786 @@
+// cadence — multi-tenant scheduling, availability and conversation infrastructure.
+//
+// Two conventions run through this whole file:
+//
+//   1. Closed vocabularies the ENGINE branches on are Prisma `enum`s. Open
+//      vocabularies the TENANT defines are `String` + a config row they own
+//      (see ExceptionType). If you find yourself wanting to add a value to an
+//      enum for one customer, that value belongs in their config, not here.
+//
+//   2. Availability is never stored. There is no `isAvailable`, no `isBooked`,
+//      no nightly job that materialises free slots. Layers 1-3 below are facts;
+//      the answer is computed per query in lib/engine/availability.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Platform & tenancy
+// ══════════════════════════════════════════════════════════════════════
+
+/// One business. Every tenant-scoped table carries `tenantId` and is additionally
+/// protected by Postgres row-level security (scripts/applyRls.ts) — the app filter
+/// is the fast path, RLS is the backstop for the query someone forgets to scope.
+model Tenant {
+  id     String @id @default(cuid())
+  slug   String @unique // URL/API-safe handle, e.g. "cara-clinic"
+  name   String
+  status String @default("active") // active | suspended
+
+  /// Fallback IANA timezone for locations that don't set their own. There is no
+  /// hardcoded default anywhere in the codebase — a tenant must choose one.
+  timezone String
+
+  /// ISO-4217. Money is stored everywhere as an integer in the currency's minor
+  /// unit (paise, cents) so no float rounding ever touches a price.
+  currency String @default("INR")
+
+  /// Tax presentation is per-tenant, not per-country-we-guessed. `taxLabel` is what
+  /// the customer sees ("GST", "VAT"); `taxRate` is a percentage; `taxInclusive`
+  /// says whether listed prices already contain it.
+  taxLabel     String? // null = don't show tax at all
+  taxRate      Float   @default(0)
+  taxInclusive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  apiKeys          ApiKey[]
+  capabilities     TenantCapability[]
+  locations        Location[]
+  resources        Resource[]
+  services         Service[]
+  exceptionTypes   ExceptionType[]
+  exceptions       ScheduleException[]
+  customers        Customer[]
+  bookings         Booking[]
+  promotions       Promotion[]
+  conversations    Conversation[]
+  webhookEndpoints WebhookEndpoint[]
+  auditLogs        AuditLog[]
+
+  @@index([status])
+}
+
+/// An API credential. Only the hash is stored; the plaintext is shown once at
+/// creation and is unrecoverable. `prefix` is the first few characters, kept in
+/// clear so a key can be identified in a UI or a log without being usable.
+model ApiKey {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name       String
+  prefix     String    @unique // e.g. "cdn_live_a1b2c3"
+  hash       String // sha256(secret + CADENCE_SECRET)
+  scopes     String[]  @default(["read", "write"])
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, revokedAt])
+}
+
+/// Where each capability's data actually lives, per tenant. This is the hinge the
+/// whole product turns on: a tenant with no CRM runs everything `hosted`; a tenant
+/// on Zenoti runs availability + bookings `brokered` through a connector; both use
+/// the identical engine interface and the identical agent tools.
+///
+/// The conversation layer reads this to assemble its per-tenant toolset — a
+/// capability that is neither hosted nor brokered simply yields no tool, so the
+/// agent cannot offer something the tenant can't deliver.
+model TenantCapability {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  capability Capability
+  mode       CapabilityMode @default(hosted)
+
+  /// Which adapter serves this when `brokered` (e.g. "zenoti", "cara", "hubspot").
+  connector String?
+  /// Adapter-specific settings — base URL, field mappings, sync cadence.
+  /// Validated with a per-connector Zod schema at the write boundary; never read
+  /// raw. Anything read in more than one place has earned a real column.
+  config    Json?
+
+  /// How long a snapshot of this capability stays usable in a conversation before
+  /// it must be refreshed. Availability is deliberately tiny; a catalog is hours.
+  snapshotTtlSeconds Int @default(300)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, capability])
+  @@index([tenantId])
+}
+
+/// Closed set — each value has an implementation behind it. Adding one is a code
+/// change, deliberately.
+enum Capability {
+  customers
+  catalog
+  availability
+  booking_read
+  booking_write
+  promotions
+  knowledge
+  notifications
+}
+
+enum CapabilityMode {
+  hosted // cadence's own tables are the system of record
+  brokered // the tenant's system is the system of record; we read/write through
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Core domain — deliberately vertical-neutral
+// ══════════════════════════════════════════════════════════════════════
+
+/// A physical or virtual place things are booked at. Carries its OWN timezone:
+/// a tenant can run branches in different zones, and inheriting silently from the
+/// tenant is how you end up double-booking across a DST boundary.
+model Location {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name     String
+  code     String? // short handle used in references
+  timezone String // IANA, e.g. "Asia/Kolkata", "Europe/London"
+  address  String?
+  active   Boolean @default(true)
+
+  externalId String? // id in the tenant's own system, when brokered
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  resources     ResourceLocation[]
+  scheduleRules ScheduleRule[]
+  exceptions    ScheduleException[]
+  bookings      Booking[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, active])
+}
+
+/// Anything that can be occupied by a booking: a person, a room, a machine, a chair.
+/// One abstraction rather than three tables, because the availability maths is
+/// identical and a booking routinely needs several at once (a surgeon AND a theatre).
+model Resource {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name String
+  kind ResourceKind @default(person)
+
+  /// Tenant-defined labels used to match a service's requirements
+  /// (e.g. ["Hair", "Surgeon"] or ["Chair", "Wash"]). Open vocabulary on purpose.
+  tags String[] @default([])
+
+  /// Employment/enabled flag set by an admin. DISTINCT from presence below, and
+  /// distinct again from whether the resource is bookable at a given instant —
+  /// that third thing is computed, never stored.
+  active Boolean @default(true)
+
+  /// Day-to-day presence, for live routing and walk-ins. Never consulted when
+  /// answering "is 3pm next Tuesday free" — that is Layers 1-3's job.
+  presence   String   @default("available") // available | busy | break | offline
+  presenceAt DateTime @default(now())
+
+  externalId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  locations     ResourceLocation[]
+  scheduleRules ScheduleRule[]
+  exceptions    ScheduleException[]
+  bookings      BookingResource[]
+
+  @@index([tenantId, active])
+  @@index([tenantId, externalId])
+}
+
+enum ResourceKind {
+  person
+  room
+  equipment
+}
+
+/// Resources rotate between locations, so this is many-to-many rather than a
+/// column on Resource.
+model ResourceLocation {
+  /// Denormalised from the parents purely so this table can carry the same
+  /// row-level-security policy as every other one. See the note on
+  /// BookingResource.tenantId.
+  tenantId   String
+  resourceId String
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([resourceId, locationId])
+  @@index([locationId])
+  @@index([tenantId])
+}
+
+/// A bookable offering with a duration and a price.
+model Service {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name        String
+  category    String? // tenant-defined; used to scope exceptions and promotions
+  description String?
+
+  durationMinutes     Int
+  /// Padding around the appointment that also blocks the resource — cleanup,
+  /// turnover, notes. Included in the interval written to BookingResource, so the
+  /// overlap constraint enforces it for free.
+  bufferBeforeMinutes Int @default(0)
+  bufferAfterMinutes  Int @default(0)
+
+  /// Minor units of Tenant.currency. Null = "price on request", which is a real
+  /// and common case: some businesses must not quote a firm number in chat.
+  priceMinor Int?
+
+  /// When false the conversation layer will describe the service but never state
+  /// a number, regardless of `priceMinor`. This exists because quoting a total is
+  /// a compliance question in several verticals, not a UI preference.
+  priceQuotable Boolean @default(true)
+
+  active     Boolean @default(true)
+  externalId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requirements ServiceRequirement[]
+  bookings     Booking[]
+
+  @@index([tenantId, active])
+  @@index([tenantId, category])
+}
+
+/// What a service needs to be bookable. A haircut needs one resource tagged
+/// "Stylist". A transplant needs one "Surgeon" and one "Theatre" for six hours.
+model ServiceRequirement {
+  id        String  @id @default(cuid())
+  tenantId  String
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  /// Match resources carrying ALL of these tags.
+  tags     String[]      @default([])
+  kind     ResourceKind?
+  /// How many distinct matching resources this service occupies.
+  quantity Int           @default(1)
+
+  @@index([serviceId])
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Layer 1 — the recurring pattern
+// ══════════════════════════════════════════════════════════════════════
+
+/// "This resource works Mondays 10:00-14:00 at Santacruz." Times are LOCAL
+/// wall-clock strings resolved against Location.timezone at query time, never
+/// instants — otherwise a schedule silently shifts by an hour at a DST boundary.
+///
+/// A schedule change closes the current row with `effectiveTo` and opens a new
+/// one, so historical availability stays reconstructible.
+model ScheduleRule {
+  id       String @id @default(cuid())
+  tenantId String
+
+  resourceId String
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  weekday   Int // 0 = Sunday .. 6 = Saturday, in the location's timezone
+  startTime String // "10:00"
+  endTime   String // "14:00"
+
+  /// Granularity of the offered grid. Slots are generated on this cadence; a
+  /// service longer than one slot simply occupies several.
+  slotMinutes Int @default(30)
+
+  effectiveFrom DateTime  @default(now()) @db.Timestamptz(3)
+  effectiveTo   DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, resourceId, weekday])
+  @@index([locationId])
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Layer 2 — exceptions (tenant-customisable)
+// ══════════════════════════════════════════════════════════════════════
+
+/// The customisable half of Layer 2. A tenant invents "OT Day", "Camp Sunday",
+/// "Study Leave", "Machine Servicing" — labels, colours, approval requirements and
+/// customer-facing wording are all theirs.
+///
+/// What they do NOT get to invent is `effect`. The engine understands exactly two
+/// verbs, and that is the line that keeps this a scheduling product rather than an
+/// unversioned rules DSL with no debugger.
+model ExceptionType {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  code  String // stable handle, referenced by seeds and connectors
+  label String // staff-facing display name, freely editable
+
+  // ── engine contract: closed, code-owned ──
+  effect     ExceptionEffect
+  onConflict ConflictPolicy  @default(block)
+
+  // ── freely customisable ──
+  defaultPriority  Int     @default(0)
+  requiresApproval Boolean @default(false)
+  colour           String?
+
+  /// Whether an exception of this type may be described to a customer at all.
+  /// Defaults to FALSE: staff write internal reasons like "root canal, back Thu"
+  /// and the agent must never repeat them. Opting in requires a deliberate flip
+  /// plus wording in `defaultPublicReason`.
+  publicVisible       Boolean @default(false)
+  defaultPublicReason String?
+
+  /// True for types the code references by `code`. Cannot be deleted or have its
+  /// effect changed through the API.
+  systemLocked Boolean @default(false)
+  active       Boolean @default(true)
+
+  config Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  exceptions ScheduleException[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, active])
+}
+
+enum ExceptionEffect {
+  subtract // leave, closure, theatre day, equipment down
+  add // extra session, weekend camp, one-off overtime
+}
+
+enum ConflictPolicy {
+  block // refuse to create the exception while bookings collide with it
+  rebook // accept, flag colliding bookings for rebooking, notify
+}
+
+/// One concrete window of altered availability.
+///
+/// The nullable scoping columns are the expressive core:
+///   resourceId NULL + locationId SET  → the whole location (a public holiday)
+///   resourceId SET  + locationId NULL → that person everywhere (personal leave)
+///   both NULL                         → the entire tenant (company shutdown)
+/// and `serviceCategories` narrows further: "in the building, but no procedures".
+model ScheduleException {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  typeId String
+  type   ExceptionType @relation(fields: [typeId], references: [id])
+
+  resourceId String?
+  resource   Resource? @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  startsAt DateTime @db.Timestamptz(3)
+  endsAt   DateTime @db.Timestamptz(3)
+
+  /// Empty = affects every service. Otherwise only these categories.
+  serviceCategories String[] @default([])
+
+  /// Overrides ExceptionType.defaultPriority. Higher wins when two exceptions
+  /// disagree — this is how "we ARE open on the public holiday" is expressed.
+  priority Int @default(0)
+
+  status ExceptionStatus @default(approved)
+
+  requestedById String?
+  approvedById  String?
+  approvedAt    DateTime? @db.Timestamptz(3)
+
+  /// Internal reason is never shown to a customer. Public reason is only used when
+  /// the type has publicVisible = true.
+  internalReason String?
+  publicReason   String?
+
+  /// RFC 5545 RRULE for repeating exceptions ("every second Saturday"). Null for
+  /// one-offs. Expanded at query time, bounded by `recurrenceEnd`.
+  recurrence    String?
+  recurrenceEnd DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, startsAt, endsAt])
+  @@index([resourceId, startsAt])
+  @@index([locationId, startsAt])
+}
+
+enum ExceptionStatus {
+  requested
+  approved
+  rejected
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Layer 3 — customers and bookings
+// ══════════════════════════════════════════════════════════════════════
+
+model Customer {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name  String?
+  /// E.164. Normalised on write against the tenant's default region — there is no
+  /// global assumption about country code.
+  phone String?
+  email String?
+
+  locale   String? // BCP-47, drives the conversation language
+  timezone String? // overrides the location's zone when confirming times
+
+  /// Suppresses ALL outbound messaging. Checked before the agent emits a token.
+  optedOut Boolean @default(false)
+
+  externalId String?
+  attributes Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookings      Booking[]
+  conversations Conversation[]
+
+  @@index([tenantId, phone])
+  @@index([tenantId, email])
+  @@index([tenantId, externalId])
+}
+
+/// A reservation. `held` is a short-lived soft lock taken while the agent waits for
+/// the customer to confirm — without it, every slot the bot offers is a race it
+/// will sometimes lose after promising.
+///
+/// The real double-booking guard is NOT here: it is an exclusion constraint on
+/// BookingResource (scripts/applyRls.ts). Application-level checking loses to
+/// concurrency eventually, and "eventually" means "with two real customers".
+model Booking {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  serviceId  String
+  service    Service  @relation(fields: [serviceId], references: [id])
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id])
+
+  /// Instants, always UTC. The customer-facing local time is derived from
+  /// Location.timezone (or Customer.timezone) at render time.
+  startsAt DateTime @db.Timestamptz(3)
+  endsAt   DateTime @db.Timestamptz(3)
+
+  status BookingStatus @default(held)
+
+  /// Only set while status = held. Swept by workers/holdExpiry.ts.
+  holdExpiresAt DateTime? @db.Timestamptz(3)
+
+  source String @default("api") // api | agent | admin | connector
+
+  /// Set when the tenant's own system is the system of record; this is the id
+  /// over there. Its absence on a brokered tenant means the write hasn't landed.
+  externalId String?
+
+  /// Snapshot of price at booking time, in minor units. A promotion that ends
+  /// tomorrow must not silently reprice yesterday's booking.
+  priceMinor     Int?
+  discountMinor  Int?
+  promotionId    String?
+  promotion      Promotion? @relation(fields: [promotionId], references: [id])
+  promotionLabel String? // denormalised: survives the promotion being deleted
+
+  notes        String?
+  cancelReason String?
+  cancelledAt  DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  resources BookingResource[]
+
+  @@index([tenantId, startsAt])
+  @@index([tenantId, status, holdExpiresAt])
+  @@index([customerId])
+  @@index([tenantId, externalId])
+}
+
+enum BookingStatus {
+  held
+  scheduled
+  confirmed
+  completed
+  cancelled
+  no_show
+  needs_rebooking
+}
+
+/// Which resources a booking occupies, and for exactly which interval.
+///
+/// `startsAt`/`endsAt`/`active` are deliberately DENORMALISED from Booking. They
+/// have to live on this row because the overlap-prevention constraint is per
+/// resource-interval, and Postgres exclusion constraints cannot reach across a
+/// join. They are written in the same transaction as the parent booking.
+///
+/// The interval here includes the service's buffers, so turnover time is enforced
+/// by the same constraint that prevents double-booking.
+model BookingResource {
+  id        String  @id @default(cuid())
+  /// Denormalised from Booking. Every table in this schema carries `tenantId` so
+  /// the RLS policy is one uniform, indexable predicate rather than an EXISTS
+  /// subquery on some tables and a column comparison on others — a rule you can
+  /// audit beats a rule you have to remember the exceptions to.
+  tenantId  String
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  resourceId String
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  startsAt DateTime @db.Timestamptz(3)
+  endsAt   DateTime @db.Timestamptz(3)
+  /// Mirrors "the parent booking occupies time": true for held/scheduled/
+  /// confirmed/completed, false for cancelled/no_show/needs_rebooking. The
+  /// exclusion constraint is filtered on it.
+  active   Boolean  @default(true)
+
+  @@unique([bookingId, resourceId])
+  @@index([resourceId, startsAt])
+  @@index([resourceId, active])
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Pricing rules
+// ══════════════════════════════════════════════════════════════════════
+
+/// A time-boxed pricing rule. The rule is stored here; the OUTCOME is snapshotted
+/// onto the booking. When the festival ends, historical bookings keep the price
+/// they were actually sold at.
+model Promotion {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  code              String?
+  name              String
+  /// Customer-facing wording the agent may use verbatim. When null, the agent
+  /// says an offer exists and hands off rather than inventing a description.
+  publicDescription String?
+
+  discountType     DiscountType
+  discountValue    Float
+  /// Cap on a percentage discount, in minor units.
+  maxDiscountMinor Int?
+
+  startsAt DateTime @db.Timestamptz(3)
+  endsAt   DateTime @db.Timestamptz(3)
+
+  /// Empty arrays = applies to everything in scope.
+  locationIds String[] @default([])
+  categories  String[] @default([])
+  serviceIds  String[] @default([])
+
+  stackable Boolean @default(false)
+  priority  Int     @default(0)
+  active    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookings Booking[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, active, startsAt, endsAt])
+}
+
+enum DiscountType {
+  percent
+  flat
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Conversation layer
+// ══════════════════════════════════════════════════════════════════════
+
+/// One continuous thread with a customer on one channel. The transcript is the
+/// agent's state — there is no separate session object to drift out of sync.
+model Conversation {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  channel          String // whatsapp | web | sms | instagram
+  externalThreadId String? // channel-side conversation id
+
+  status String @default("open") // open | closed
+
+  /// Set the moment a human takes over. The agent must go silent on this thread
+  /// until it is cleared, or staff and bot talk over each other in front of the
+  /// customer.
+  botPaused   Boolean   @default(false)
+  botPausedAt DateTime? @db.Timestamptz(3)
+
+  /// Last time the operational snapshot backing this conversation was refreshed.
+  snapshotAt DateTime? @db.Timestamptz(3)
+
+  lastInboundAt  DateTime? @db.Timestamptz(3)
+  lastOutboundAt DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages ConversationMessage[]
+
+  @@unique([tenantId, channel, externalThreadId])
+  @@index([tenantId, status])
+  @@index([customerId])
+}
+
+model ConversationMessage {
+  id             String       @id @default(cuid())
+  tenantId       String
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  direction String // inbound | outbound
+  /// agent | human | customer | system
+  author    String
+  body      String
+
+  /// What the model did this turn — tool calls and their results, for audit.
+  toolTrace Json?
+
+  /// Which snapshot the agent was looking at when it said this, and which
+  /// knowledge chunks it read. This is how you answer "your bot told me 3pm was
+  /// free" three weeks later, and how you tell stale data from a model error.
+  snapshotAt DateTime? @db.Timestamptz(3)
+  sources    String[]  @default([])
+
+  externalId String? // channel-side message id, for delivery receipts
+  status     String? // sent | delivered | read | failed
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([externalId])
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Platform plumbing
+// ══════════════════════════════════════════════════════════════════════
+
+/// Makes POST retries safe. A client that times out and retries with the same
+/// key gets the original response replayed rather than a second booking.
+model IdempotencyRecord {
+  id       String @id @default(cuid())
+  tenantId String
+
+  key          String
+  /// Hash of method + path + body. A same-key-different-body replay is a client
+  /// bug and must 422 rather than silently returning the wrong response.
+  requestHash  String
+  statusCode   Int
+  responseBody Json
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime @db.Timestamptz(3)
+
+  @@unique([tenantId, key])
+  @@index([expiresAt])
+}
+
+model WebhookEndpoint {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  url    String
+  secret String // HMAC-SHA256 signing secret, per endpoint
+  events String[] @default([])
+  active Boolean  @default(true)
+
+  disabledReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deliveries WebhookDelivery[]
+
+  @@index([tenantId, active])
+}
+
+model WebhookDelivery {
+  id         String          @id @default(cuid())
+  tenantId   String
+  endpointId String
+  endpoint   WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  event   String
+  payload Json
+
+  attempts      Int       @default(0)
+  status        String    @default("pending") // pending | delivered | failed
+  lastError     String?
+  lastAttemptAt DateTime?
+  deliveredAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
+  @@index([endpointId])
+}
+
+model AuditLog {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  actor   String // apiKey:<prefix> | user:<id> | agent | system
+  action  String // exception.created | promotion.updated | booking.cancelled
+  subject String // "<model>:<id>"
+  before  Json?
+  after   Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([subject])
+}

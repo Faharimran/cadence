@@ -1,0 +1,30 @@
+# Local development services for cadence. Start: docker compose up -d
+# (The Next.js app and the worker still run via npm.)
+#
+# Postgres uses the pgvector image rather than plain postgres:16 — the knowledge
+# store for the conversation layer needs the `vector` extension, and adding it
+# later means rebuilding the volume.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cadence
+    ports:
+      - "5433:5432" # 5433 so it can run alongside another local Postgres
+    volumes:
+      - cadence_pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    ports:
+      - "6380:6379" # 6380 for the same reason
+    volumes:
+      - cadence_redisdata:/data
+
+volumes:
+  cadence_pgdata:
+  cadence_redisdata:
