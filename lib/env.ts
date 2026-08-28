@@ -13,6 +13,13 @@ const schema = z.object({
   DATABASE_APP_URL: z.string().min(1).optional(),
   REDIS_URL: z.string().min(1).default("redis://localhost:6379/1"),
   ANTHROPIC_API_KEY: z.string().optional(),
+  /**
+   * Required when ANTHROPIC_API_KEY is an *identity-linked* key — those keys
+   * belong to a person rather than a workspace, so every request must name the
+   * workspace it acts in or the API returns 400. Plain workspace-scoped keys
+   * don't need it, hence optional.
+   */
+  ANTHROPIC_WORKSPACE_ID: z.string().optional(),
   CADENCE_SECRET: z.string().min(1),
   CADENCE_BASE_URL: z.string().url().default("http://localhost:3000"),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),

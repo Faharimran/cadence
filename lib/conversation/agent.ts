@@ -41,7 +41,16 @@ function anthropic(): Anthropic {
       "No ANTHROPIC_API_KEY configured — the conversation layer cannot run.",
     );
   }
-  client ??= new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+  client ??= new Anthropic({
+    apiKey: env.ANTHROPIC_API_KEY,
+    // Identity-linked keys belong to a person, not a workspace, so the API
+    // rejects every request that doesn't name the workspace it acts in.
+    // Workspace-scoped keys ignore the header, so sending it when set is
+    // always safe.
+    ...(env.ANTHROPIC_WORKSPACE_ID
+      ? { defaultHeaders: { "anthropic-workspace-id": env.ANTHROPIC_WORKSPACE_ID } }
+      : {}),
+  });
   return client;
 }
 
@@ -95,13 +104,18 @@ export async function runAgentTurn(
     max_iterations: MAX_ITERATIONS,
   });
 
+  // Iterate to completion. Breaking out of this loop early abandons the async
+  // iterator that drives the runner, and the `done()` below then never
+  // resolves — a deadlock that only appears on whichever path breaks, which
+  // here was escalation.
+  //
+  // Stopping the agent after an escalation is therefore enforced in the TOOLS
+  // (they refuse once `outcome.escalated` is set) rather than by cutting the
+  // loop short. Same guarantee, no hang.
   for await (const message of runner) {
     for (const block of message.content) {
       if (block.type === "tool_use") toolCalls.push({ name: block.name, input: block.input });
     }
-    // Escalation ends the agent's involvement. Without this the model can keep
-    // working a thread a human has already been handed.
-    if (outcome.escalated) break;
   }
 
   const final = await runner.done();

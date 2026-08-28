@@ -92,6 +92,25 @@ function assertContactable(ctx: ToolContext) {
   }
 }
 
+/**
+ * Once a thread has been escalated it belongs to a person, and the agent must
+ * not keep acting on it.
+ *
+ * This is enforced here rather than by breaking out of the agent's loop:
+ * abandoning the tool-runner's async iterator mid-flight leaves its completion
+ * promise unresolved and hangs the turn. Refusing at the tool boundary gives
+ * the same guarantee — the model can still emit a closing sentence, but it
+ * cannot *do* anything further.
+ */
+function assertNotEscalated(ctx: ToolContext) {
+  if (ctx.outcome.escalated) {
+    throw new CadenceError(
+      "forbidden",
+      "This conversation has been handed to a colleague. Say one short line confirming that, and stop.",
+    );
+  }
+}
+
 export function buildTools(ctx: ToolContext) {
   const tools = [];
 
@@ -142,6 +161,7 @@ export function buildTools(ctx: ToolContext) {
         }),
         run: async (input) => {
           try {
+            assertNotEscalated(ctx);
             const result = await getAvailability(ctx.db, {
               tenantId: ctx.tenantId,
               serviceId: input.serviceId,
@@ -202,6 +222,7 @@ export function buildTools(ctx: ToolContext) {
         }),
         run: async (input) => {
           try {
+            assertNotEscalated(ctx);
             assertContactable(ctx);
             if (!isHosted(ctx.caps, "booking_write")) {
               // Brokered writes must go through the connector, or our copy and
@@ -245,6 +266,7 @@ export function buildTools(ctx: ToolContext) {
         inputSchema: z.object({ holdId: z.string() }),
         run: async ({ holdId }) => {
           try {
+            assertNotEscalated(ctx);
             assertContactable(ctx);
             const booking = await confirmHold(ctx.db, {
               tenantId: ctx.tenantId,
@@ -273,6 +295,7 @@ export function buildTools(ctx: ToolContext) {
         }),
         run: async ({ bookingId, reason }) => {
           try {
+            assertNotEscalated(ctx);
             const booking = await cancelBooking(ctx.db, {
               tenantId: ctx.tenantId,
               bookingId,
@@ -355,6 +378,9 @@ export function buildTools(ctx: ToolContext) {
         note: z.string().max(500).describe("One line for the colleague picking this up."),
       }),
       run: async ({ reasons, note }) => {
+        if (ctx.outcome.escalated) {
+          return json({ ok: true, escalated: true, instruction: "Already handed over. Stop." });
+        }
         ctx.outcome.escalated = true;
         ctx.outcome.escalationReasons = reasons;
         await ctx.db.conversation.updateMany({

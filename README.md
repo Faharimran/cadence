@@ -19,7 +19,7 @@ say "3pm Thursday is free" and then actually hold it are not.
 | Holds, bookings, cancellation | ✅ built, concurrency proven |
 | REST API (`/v1`) with key auth + idempotency | ✅ availability, holds, bookings |
 | Conversation layer — capability-assembled tools, snapshots, guardrails | ✅ built, 30 assertions passing |
-| Agent loop against the live model | ⚠️ written, unverified — needs `ANTHROPIC_API_KEY` |
+| Agent loop against the live model | ✅ verified end to end — books, escalates, hands over |
 | Channel adapters (WhatsApp, web) | ⬜ next |
 | Connectors (brokered capabilities) | ⬜ next |
 | Admin UI | ⬜ next |
@@ -59,6 +59,12 @@ npm run prove          # both harnesses
 `proveEngine.ts` is the engine's real specification: exception precedence, category
 scoping, buffer enforcement, per-location timezones, DST-skipped wall-clock times, and
 five concurrent customers racing for one slot.
+
+`live:conversation` drives three real turns against Claude and then asserts against the
+database what actually landed. It costs tokens and is non-deterministic, so it is a manual
+smoke test rather than CI — what it proves is the part the cheap harness cannot: that the
+model resolves "monday morning" to the right instant, holds *before* promising, and hands
+over instead of negotiating.
 
 `proveConversation.ts` covers the conversation layer **without calling a model**. Every
 tool exposes a plain `run()`, so the dangerous half — the part that reads customer data,

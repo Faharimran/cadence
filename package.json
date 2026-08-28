@@ -20,7 +20,8 @@
     "seed:demo": "dotenv -e .env.local -- tsx scripts/seedDemoTenant.ts",
     "prove:engine": "dotenv -e .env.local -- tsx scripts/proveEngine.ts",
     "prove:conversation": "dotenv -e .env.local -- tsx scripts/proveConversation.ts",
-    "prove": "npm run prove:engine && npm run prove:conversation"
+    "prove": "npm run prove:engine && npm run prove:conversation",
+    "live:conversation": "dotenv -e .env.local -- tsx scripts/liveConversation.ts"
   },
   "engines": {
     "node": ">=20.9"
