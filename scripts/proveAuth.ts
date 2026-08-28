@@ -95,6 +95,18 @@ async function main() {
     check("the dashboard renders", dash.status === 200, String(dash.status));
     check("and shows the tenant", dash.body.includes(user.tenant.name));
 
+    // The setup checklist is what turns nine screens into a guided experience,
+    // so it needs to actually reach the page — not merely compute correctly.
+    check(
+      "the dashboard shows outstanding setup steps in plain language",
+      dash.body.includes("Connect WhatsApp"),
+      "checklist missing from the rendered page",
+    );
+    check(
+      "and does not use schema words for them",
+      !dash.body.includes("ScheduleRule") && !dash.body.includes("ChannelAccount"),
+    );
+
     const exceptions = await get("/admin/exceptions", good);
     check("leave & closures renders", exceptions.status === 200, String(exceptions.status));
     check(

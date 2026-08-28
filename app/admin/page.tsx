@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireUser, asTenant } from "@/lib/auth/guard";
 import { describeInstant, localDateIn } from "@/lib/engine/time";
+import { assessReadiness } from "@/lib/readiness";
+import { Checklist } from "./Checklist";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +39,8 @@ export default async function AdminHome() {
       db.conversation.count({ where: { tenantId: user.tenantId, status: "open" } }),
     ]);
 
-    return { todays, needsPerson, closures, unread };
+    const readiness = await assessReadiness(db, user.tenantId);
+    return { todays, needsPerson, closures, unread, readiness };
   });
 
   return (
@@ -50,6 +53,8 @@ export default async function AdminHome() {
           {user.name ? `Morning, ${user.name.split(" ")[0]}` : user.tenantName}
         </h1>
       </header>
+
+      <Checklist readiness={data.readiness} />
 
       <dl className="grid gap-px overflow-hidden rounded-lg border border-rule bg-rule sm:grid-cols-3">
         <Stat label="Booked today" value={String(data.todays.length)} />

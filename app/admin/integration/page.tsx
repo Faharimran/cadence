@@ -43,11 +43,38 @@ export default async function IntegrationPage() {
   return (
     <div className="flex flex-col gap-10">
       <PageHeader
-        title="Integration"
-        lede="Connect the system you already run. Read availability and make bookings over the API; hear about everything that happens through webhooks."
+        title="Connecting other software"
+        lede="Most businesses never need this page."
       />
 
+      {/* The default answer, stated first and plainly. Someone who does not run
+          their own system should be able to read one paragraph, conclude there
+          is nothing for them to do, and leave. */}
+      <section className="rounded-lg border border-rule bg-surface p-5">
+        <p className="max-w-[66ch] text-sm text-ink-2">
+          If you keep your bookings, customers and staff here in cadence, everything is already
+          connected and there is nothing on this page to set up.
+        </p>
+        <p className="mt-3 max-w-[66ch] text-sm text-ink-2">
+          You only need what follows if you also run <strong>your own software</strong> — a CRM
+          or clinic system that should stay in step with what happens here. Setting it up is a
+          job for whoever looks after that software, not for the front desk.
+        </p>
+      </section>
+
       {!isOwner && <Empty>Only the owner can change these.</Empty>}
+
+      {/* Everything below is the developer surface, folded away by default. */}
+      <details className="flex flex-col gap-10 [&[open]>summary]:mb-2">
+        <summary className="cursor-pointer font-mono text-xs font-semibold uppercase tracking-[0.13em] text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+          I run my own software — show me the technical setup
+        </summary>
+
+        <p className="mb-6 max-w-[66ch] text-sm text-ink-2">
+          Hand this page to whoever maintains that software. They will need about an hour: create
+          a key, tell us where to send updates, and write a small endpoint on their side to
+          receive them.
+        </p>
 
       {/* ── API keys ──────────────────────────────────────────────── */}
       {isOwner && (
@@ -259,6 +286,7 @@ if (Math.abs(Date.now()/1000 - Number(t)) > 300) return 401;`}
           order and the signature will never match.
         </p>
       </Section>
+      </details>
     </div>
   );
 }

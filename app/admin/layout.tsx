@@ -19,7 +19,7 @@ const NAV = [
   { href: "/admin/services", label: "Services" },
   { href: "/admin/bookings", label: "Bookings" },
   { href: "/admin/conversations", label: "Conversations" },
-  { href: "/admin/integration", label: "Integration" },
+  { href: "/admin/integration", label: "Other software" },
   { href: "/admin/settings", label: "Settings" },
 ];
 
