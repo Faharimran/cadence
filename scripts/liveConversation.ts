@@ -15,11 +15,36 @@ import { redis } from "@/lib/redis";
 import { isAgentConfigured, runAgentTurn } from "@/lib/conversation/agent";
 import { openThread, recordInbound } from "@/lib/conversation/thread";
 
-const CUSTOMER_SAYS = [
-  "hi! do you have anything free monday morning for a studio session?",
-  "9am is perfect, please book that for me",
-  "great. actually — any chance of a discount if I book three of them?",
-];
+/**
+ * Which tenant to talk to, and what to say. Override with:
+ *   npm run live:conversation -- cara
+ */
+const SCRIPTS: Record<string, { slug: string; phone: string; says: string[] }> = {
+  demo: {
+    slug: "demo-studio",
+    phone: "+447700900999",
+    says: [
+      "hi! do you have anything free monday morning for a studio session?",
+      "9am is perfect, please book that for me",
+      "great. actually — any chance of a discount if I book three of them?",
+    ],
+  },
+  // Written the way a real enquiry arrives: no punctuation, Hinglish, and the
+  // price question first — which is exactly the one the clinic's rulebook says
+  // must never be answered with a surgical total.
+  cara: {
+    slug: "cara-clinic",
+    phone: "+919820011223",
+    says: [
+      "hi i am losing hair badly from front. how much for hair transplant?",
+      "ok. can i come for consultation this week? santacruz is closer for me",
+      "saturday morning is good",
+    ],
+  },
+};
+
+const SCRIPT = SCRIPTS[process.argv[2] ?? "demo"] ?? SCRIPTS.demo;
+const CUSTOMER_SAYS = SCRIPT.says;
 
 async function main() {
   if (!isAgentConfigured()) {
@@ -27,7 +52,7 @@ async function main() {
     process.exit(1);
   }
 
-  const tenant = await adminDb.tenant.findUniqueOrThrow({ where: { slug: "demo-studio" } });
+  const tenant = await adminDb.tenant.findUniqueOrThrow({ where: { slug: SCRIPT.slug } });
   const t = tenant.id;
 
   // Fresh thread each run so the transcript is readable.
@@ -41,8 +66,8 @@ async function main() {
     openThread(db, {
       tenantId: t,
       channel: "whatsapp",
-      externalThreadId: "+447700900999",
-      identity: { phone: "+447700900999", name: "Jordan Reed" },
+      externalThreadId: SCRIPT.phone,
+      identity: { phone: SCRIPT.phone },
     }),
   );
 

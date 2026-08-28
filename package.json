@@ -26,7 +26,9 @@
     "user": "dotenv -e .env.local -- tsx scripts/createUser.ts",
     "prove:auth": "dotenv -e .env.local -- tsx scripts/proveAuth.ts",
     "prove:delivery": "dotenv -e .env.local -- tsx scripts/proveWebhookDelivery.ts",
-    "db:encrypt": "dotenv -e .env.local -- tsx scripts/encryptSecrets.ts"
+    "db:encrypt": "dotenv -e .env.local -- tsx scripts/encryptSecrets.ts",
+    "check": "npm run prove:engine && npm run prove:conversation && npm run prove:delivery && npm run prove:webhook && npm run prove:auth",
+    "seed:cara": "dotenv -e .env.local -- tsx scripts/seedCaraTenant.ts"
   },
   "engines": {
     "node": ">=20.9"
