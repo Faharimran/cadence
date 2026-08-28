@@ -24,7 +24,7 @@ say "3pm Thursday is free" and then actually hold it are not.
 | WhatsApp outbound send | ⚠️ written, needs real Meta credentials to verify |
 | Worker: agent turns + hold expiry sweep | ✅ built |
 | Connectors (brokered capabilities) | ⬜ next |
-| Admin UI | ⬜ next |
+| Admin UI — auth, hours, people, services, leave, bookings, inbox | ✅ built, 33 assertions passing |
 
 ## Setup
 
@@ -57,6 +57,13 @@ curl localhost:3000/api/health
 
 npm run prove          # engine + conversation (no server, no API key needed)
 npm run prove:webhook  # inbound WhatsApp path (needs `npm run dev` running)
+npm run prove:auth     # admin auth + every screen renders (needs the server)
+```
+
+Bootstrap a login:
+
+```bash
+npm run user -- demo-studio you@example.com <password> owner
 ```
 
 `proveEngine.ts` is the engine's real specification: exception precedence, category

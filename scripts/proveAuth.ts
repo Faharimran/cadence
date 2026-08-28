@@ -118,6 +118,63 @@ async function main() {
       String(deactivated.status),
     );
     await adminDb.user.update({ where: { id: user.id }, data: { active: true } });
+
+    // ── 5. Every screen renders ───────────────────────────────────────
+    // A page that typechecks can still throw at request time — a bad Prisma
+    // include, a null nobody guarded. Rendering each one is the only proof.
+    console.log("\n5. Every screen renders");
+    const screens = [
+      "/admin",
+      "/admin/exceptions",
+      "/admin/schedules",
+      "/admin/resources",
+      "/admin/services",
+      "/admin/bookings",
+      "/admin/bookings?past=1",
+      "/admin/conversations",
+      "/admin/settings",
+    ];
+    for (const path of screens) {
+      const res = await get(path, good);
+      check(path, res.status === 200, `HTTP ${res.status}`);
+    }
+
+    // And a detail page, which needs a real id. Created here rather than skipped
+    // when absent — a conditional check silently stops covering the thing it was
+    // written for the moment the fixture goes away.
+    const convo =
+      (await adminDb.conversation.findFirst({ where: { tenantId: user.tenantId } })) ??
+      (await (async () => {
+        const customer = await adminDb.customer.create({
+          data: { tenantId: user.tenantId, name: "Render probe", phone: "+440000000000" },
+        });
+        return adminDb.conversation.create({
+          data: {
+            tenantId: user.tenantId,
+            customerId: customer.id,
+            channel: "whatsapp",
+            externalThreadId: "440000000000",
+            messages: {
+              create: {
+                tenantId: user.tenantId,
+                direction: "inbound",
+                author: "customer",
+                body: "probe",
+              },
+            },
+          },
+        });
+      })());
+
+    {
+      const res = await get(`/admin/conversations/${convo.id}`, good);
+      check("/admin/conversations/[id]", res.status === 200, `HTTP ${res.status}`);
+
+      // A conversation belonging to nobody must 404 rather than 500 or, worse,
+      // render someone else's thread.
+      const missing = await get("/admin/conversations/does-not-exist", good);
+      check("an unknown conversation 404s", missing.status === 404, `HTTP ${missing.status}`);
+    }
   }
 
   console.log(`\n${passed} passed, ${failed} failed\n`);

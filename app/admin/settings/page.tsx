@@ -1,0 +1,143 @@
+import { requireUser, asTenant, can } from "@/lib/auth/guard";
+import { LocationForm, ExceptionTypeForm, WhatsAppForm } from "./forms";
+import { Empty, PageHeader, Pill, Row, Section } from "../ui";
+
+export const dynamic = "force-dynamic";
+
+export default async function SettingsPage() {
+  const user = await requireUser();
+
+  const { locations, types, channel, users } = await asTenant(user, async (db) => {
+    const [locations, types, channel, users] = await Promise.all([
+      db.location.findMany({ where: { tenantId: user.tenantId }, orderBy: { name: "asc" } }),
+      db.exceptionType.findMany({
+        where: { tenantId: user.tenantId },
+        orderBy: { defaultPriority: "desc" },
+      }),
+      db.channelAccount.findFirst({ where: { tenantId: user.tenantId, channel: "whatsapp" } }),
+      db.user.findMany({ where: { tenantId: user.tenantId }, orderBy: { email: "asc" } }),
+    ]);
+    return { locations, types, channel, users };
+  });
+
+  const isOwner = can(user, "owner");
+  const isManager = can(user, "manager");
+
+  return (
+    <div className="flex flex-col gap-10">
+      <PageHeader
+        title="Settings"
+        lede={`${user.tenantName} · ${user.tenantTimezone} · ${user.tenantCurrency}`}
+      />
+
+      {/* ── Locations ─────────────────────────────────────────────── */}
+      <Section title="Locations" boxed>
+        {isManager ? (
+          <LocationForm suggested={user.tenantTimezone} />
+        ) : (
+          <Empty>Only managers and owners can change locations.</Empty>
+        )}
+      </Section>
+
+      <Section title="Where you operate">
+        {locations.length === 0 ? (
+          <Empty>None yet.</Empty>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {locations.map((l) => (
+              <Row key={l.id}>
+                <span className="font-mono text-sm font-semibold">{l.name}</span>
+                {l.code && <Pill>{l.code}</Pill>}
+                <span className="font-mono text-xs text-ink-2">{l.timezone}</span>
+                {!l.active && <Pill tone="bad">inactive</Pill>}
+              </Row>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      {/* ── Exception types ───────────────────────────────────────── */}
+      <Section title="Your words for time off" boxed>
+        <p className="mb-4 max-w-[66ch] text-sm text-ink-2">
+          Name these however your business talks — “OT day”, “camp Sunday”, “study leave”. What
+          you cannot invent is the <em>effect</em>: every type either removes bookable time or
+          adds it, and those two are all the engine understands.
+        </p>
+        {isManager ? (
+          <ExceptionTypeForm />
+        ) : (
+          <Empty>Only managers and owners can change these.</Empty>
+        )}
+      </Section>
+
+      <Section title="Types in use">
+        {types.length === 0 ? (
+          <Empty>None yet — leave and closures cannot be recorded until one exists.</Empty>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {types.map((t) => (
+              <Row key={t.id}>
+                <span className="font-mono text-sm font-semibold">{t.label}</span>
+                <span className="font-mono text-[11px] text-ink-3">{t.code}</span>
+                <Pill tone={t.effect === "add" ? "ok" : "bad"}>
+                  {t.effect === "add" ? "adds time" : "removes time"}
+                </Pill>
+                <span className="font-mono text-[11px] text-ink-3">
+                  priority {t.defaultPriority}
+                </span>
+                {t.requiresApproval && <Pill tone="warn">needs approval</Pill>}
+                {t.publicVisible ? (
+                  <span className="text-xs text-ink-2">
+                    customers hear: “{t.defaultPublicReason}”
+                  </span>
+                ) : (
+                  <span className="text-xs text-ink-3">reason never shared</span>
+                )}
+                {t.systemLocked && <Pill>built in</Pill>}
+              </Row>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      {/* ── WhatsApp ──────────────────────────────────────────────── */}
+      <Section title="WhatsApp" boxed>
+        {isOwner ? (
+          <WhatsAppForm
+            existing={
+              channel
+                ? {
+                    externalAccountId: channel.externalAccountId,
+                    displayNumber: channel.displayNumber,
+                    hasToken: Boolean(channel.accessToken),
+                  }
+                : null
+            }
+          />
+        ) : (
+          <Empty>Only the owner can change channel credentials.</Empty>
+        )}
+      </Section>
+
+      {/* ── People ────────────────────────────────────────────────── */}
+      <Section title="Who can sign in">
+        <ul className="flex flex-col gap-2">
+          {users.map((u) => (
+            <Row key={u.id}>
+              <span className="font-mono text-sm">{u.email}</span>
+              <Pill>{u.role}</Pill>
+              {!u.active && <Pill tone="bad">disabled</Pill>}
+              {u.id === user.id && <span className="text-xs text-ink-3">that&apos;s you</span>}
+            </Row>
+          ))}
+        </ul>
+        <p className="text-[11px] text-ink-3">
+          Adding colleagues is still a command:{" "}
+          <code className="font-mono">
+            npm run user -- {user.tenantSlug} someone@example.com &lt;password&gt; staff
+          </code>
+        </p>
+      </Section>
+    </div>
+  );
+}
