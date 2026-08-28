@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { asTenant, requireRole } from "@/lib/auth/guard";
 import { assertValidTimezone } from "@/lib/engine/time";
+import { encrypt } from "@/lib/crypto";
 
 export type SettingsFormState = { error?: string; ok?: string } | null;
 
@@ -162,9 +163,9 @@ export async function saveWhatsAppAccount(
       displayNumber: input.displayNumber.trim() || null,
       // Blank means "leave what is there" — so re-saving the form to change the
       // display number does not wipe a token nobody retyped.
-      ...(input.accessToken.trim() ? { accessToken: input.accessToken.trim() } : {}),
-      ...(input.appSecret.trim() ? { appSecret: input.appSecret.trim() } : {}),
-      ...(input.verifyToken.trim() ? { verifyToken: input.verifyToken.trim() } : {}),
+      ...(input.accessToken.trim() ? { accessToken: encrypt(input.accessToken.trim()) } : {}),
+      ...(input.appSecret.trim() ? { appSecret: encrypt(input.appSecret.trim()) } : {}),
+      ...(input.verifyToken.trim() ? { verifyToken: encrypt(input.verifyToken.trim()) } : {}),
     };
 
     if (existing) {

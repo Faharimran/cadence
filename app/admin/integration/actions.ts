@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { Capability, CapabilityMode } from "@prisma/client";
 import { asTenant, requireRole, requireUser } from "@/lib/auth/guard";
 import { generateApiKey } from "@/lib/api/auth";
-import { newSigningSecret } from "@/lib/webhooks/deliver";
+import { newSigningSecret, sealSecret } from "@/lib/webhooks/deliver";
 
 export type IntegrationFormState =
   | { error?: string; ok?: string; /** Shown once, never retrievable again. */ secret?: string }
@@ -85,7 +85,7 @@ export async function createEndpoint(
       data: {
         tenantId: user.tenantId,
         url: parsed.data.url,
-        secret,
+        secret: sealSecret(secret),
         // Empty means every event, which is the sane default for a first
         // integration — you can narrow it once you know what you use.
         events: parsed.data.events,

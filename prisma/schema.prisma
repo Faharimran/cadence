@@ -733,10 +733,9 @@ model ChannelAccount {
 
   /// Credentials for sending as this identity.
   ///
-  /// ⚠️ Plaintext today. Before this serves a real tenant they must be encrypted
-  /// at rest or moved to a secrets manager — a leaked row here lets an attacker
-  /// message that business's entire customer list. A go-live blocker, not a
-  /// nice-to-have.
+  /// Encrypted at rest with AES-256-GCM (lib/crypto.ts) — a leaked row here
+  /// would otherwise let an attacker message that business's entire customer
+  /// list. Values are sealed on write and opened only at the moment of use.
   accessToken String?
   /// App secret, used to verify X-Hub-Signature-256 on inbound payloads.
   appSecret   String?

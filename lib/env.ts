@@ -21,6 +21,13 @@ const schema = z.object({
    */
   ANTHROPIC_WORKSPACE_ID: z.string().optional(),
   CADENCE_SECRET: z.string().min(1),
+  /**
+   * Encrypts stored third-party credentials. Kept separate from CADENCE_SECRET
+   * so the two rotate independently — rotating the API-key pepper only forces
+   * keys to be reissued, whereas rotating this one makes existing ciphertext
+   * unreadable.
+   */
+  CADENCE_ENCRYPTION_KEY: z.string().min(16).optional(),
   CADENCE_BASE_URL: z.string().url().default("http://localhost:3000"),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });
@@ -42,6 +49,14 @@ export const env = parsed.data;
  */
 export function isolationEnforced(): boolean {
   return Boolean(env.DATABASE_APP_URL && env.DATABASE_APP_URL !== env.DATABASE_URL);
+}
+
+if (env.NODE_ENV === "production" && !env.CADENCE_ENCRYPTION_KEY) {
+  throw new Error(
+    "CADENCE_ENCRYPTION_KEY must be set in production — third-party credentials are stored " +
+      "encrypted, and deriving the key from CADENCE_SECRET couples two things that need to " +
+      "rotate on different schedules.",
+  );
 }
 
 if (env.NODE_ENV === "production" && !isolationEnforced()) {

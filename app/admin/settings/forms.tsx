@@ -167,12 +167,8 @@ export function WhatsAppForm({
         </Field>
       </div>
 
-      <p
-        className="rounded-md border px-3 py-2 text-[11px]"
-        style={{ borderColor: "color-mix(in srgb, var(--warn) 40%, transparent)", color: "var(--warn)" }}
-      >
-        These are stored unencrypted for now. Do not connect a production number until that is
-        fixed.
+      <p className="text-[11px] text-ink-3">
+        Stored encrypted, and never shown again once saved.
       </p>
 
       <Feedback state={state} />

@@ -12,7 +12,7 @@
     "worker": "tsx workers/index.ts",
     "worker:dev": "dotenv -e .env.local -- tsx watch workers/index.ts",
     "db:generate": "prisma generate",
-    "db:push": "dotenv -e .env.local -- prisma db push",
+    "db:push": "dotenv -e .env.local -- prisma db push   # local iteration only \u2014 deploys use db:migrate:deploy",
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev",
     "db:migrate:deploy": "dotenv -e .env.local -- prisma migrate deploy",
     "db:studio": "dotenv -e .env.local -- prisma studio",
@@ -25,7 +25,8 @@
     "prove:webhook": "dotenv -e .env.local -- tsx scripts/proveWebhook.ts",
     "user": "dotenv -e .env.local -- tsx scripts/createUser.ts",
     "prove:auth": "dotenv -e .env.local -- tsx scripts/proveAuth.ts",
-    "prove:delivery": "dotenv -e .env.local -- tsx scripts/proveWebhookDelivery.ts"
+    "prove:delivery": "dotenv -e .env.local -- tsx scripts/proveWebhookDelivery.ts",
+    "db:encrypt": "dotenv -e .env.local -- tsx scripts/encryptSecrets.ts"
   },
   "engines": {
     "node": ">=20.9"

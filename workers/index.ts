@@ -2,6 +2,7 @@ import { Worker } from "bullmq";
 import { adminDb, withTenant } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { logger } from "@/lib/logger";
+import { decrypt } from "@/lib/crypto";
 import {
   AGENT_TURN_QUEUE,
   createQueueConnection,
@@ -108,7 +109,7 @@ async function deliverWhatsApp(args: {
   for (const part of splitForDelivery(args.body)) {
     const result = await sendText({
       phoneNumberId: account.externalAccountId,
-      accessToken: account.accessToken,
+      accessToken: decrypt(account.accessToken),
       to: args.to,
       body: part,
     });

@@ -8,6 +8,7 @@ import {
 } from "@/lib/channels/whatsapp";
 import { openThread, recordInbound } from "@/lib/conversation/thread";
 import { scheduleAgentTurn } from "@/lib/queue";
+import { decrypt } from "@/lib/crypto";
 
 /**
  * Meta's inbound webhook.
@@ -32,12 +33,27 @@ export async function GET(request: Request) {
 
   // Cross-tenant by necessity: the handshake carries no phone_number_id, only
   // the token, so the token itself has to identify the account.
-  const account = await adminDb.channelAccount.findFirst({
-    where: { channel: "whatsapp", verifyToken: token, active: true },
+  //
+  // Compared after decryption rather than matched in SQL, because the stored
+  // value is encrypted with a random IV — the same token encrypts differently
+  // every time, so `where: { verifyToken: token }` would never match anything.
+  // This runs once when a number is first connected, so scanning the (small)
+  // set of accounts is not a hot path.
+  const candidates = await adminDb.channelAccount.findMany({
+    where: { channel: "whatsapp", active: true, verifyToken: { not: null } },
+    select: { verifyToken: true },
   });
-  if (!account?.verifyToken) return new Response("forbidden", { status: 403 });
 
-  const challenge = verifyChallenge(params, account.verifyToken);
+  const matched = candidates.find((c) => {
+    try {
+      return decrypt(c.verifyToken!) === token;
+    } catch {
+      return false; // a row we cannot decrypt is not a match
+    }
+  });
+  if (!matched?.verifyToken) return new Response("forbidden", { status: 403 });
+
+  const challenge = verifyChallenge(params, decrypt(matched.verifyToken));
   if (!challenge) return new Response("forbidden", { status: 403 });
 
   return new Response(challenge, {
@@ -81,7 +97,7 @@ export async function POST(request: Request) {
   }
 
   if (account.appSecret) {
-    if (!verifySignature(raw, request.headers.get("x-hub-signature-256"), account.appSecret)) {
+    if (!verifySignature(raw, request.headers.get("x-hub-signature-256"), decrypt(account.appSecret))) {
       // A bad signature is the one case worth refusing: it is either a
       // misconfiguration or someone forging messages into a real thread.
       logger.error("whatsapp signature verification failed", { phoneNumberId });

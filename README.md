@@ -25,7 +25,9 @@ say "3pm Thursday is free" and then actually hold it are not.
 | Worker: agent turns + hold expiry sweep | ✅ built |
 | Integration surface — API keys, webhooks, capability modes | ✅ built, 21 assertions passing |
 | Connectors (brokered capabilities) | ⬜ next |
-| Admin UI — auth, hours, people, services, leave, bookings, inbox | ✅ built, 33 assertions passing |
+| Admin UI + guided setup checklist | ✅ built, 45 assertions passing |
+| Secrets encrypted at rest (AES-256-GCM) | ✅ built |
+| Migrations (no more `db push` in deploys) | ✅ built |
 
 ## Setup
 
@@ -40,14 +42,20 @@ createdb cadence
 psql "$DATABASE_URL" -c "CREATE ROLE cadence_app LOGIN PASSWORD 'cadence_app'"
 psql "$DATABASE_URL" -c "GRANT USAGE ON SCHEMA public TO cadence_app"
 
-npm run db:push
-npm run db:rls -- --verify        # policies + overlap constraint, then prove them
+npm run db:migrate:deploy         # schema + the no-double-booking constraint
+npm run db:rls -- --verify        # row-level security, then prove it holds
 npm run seed:demo                 # prints an API key once
+npm run user -- demo-studio you@example.com <password> owner
 npm run dev
 ```
 
-`npm run db:rls` must be re-run after every schema change — Prisma does not know
-those objects exist.
+Two things Prisma cannot express live outside the schema:
+
+- the **exclusion constraint** that prevents double-booking ships as a migration
+  (`1_overlap_constraint`), so a fresh deploy gets it automatically
+- **row-level security** stays in `npm run db:rls`, because its policies grant to
+  an application role that has to exist first. Re-run it after every schema
+  change; `/api/health` reports loudly if it is missing or inert.
 
 ### Verifying
 

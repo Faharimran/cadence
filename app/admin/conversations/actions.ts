@@ -6,6 +6,7 @@ import { pauseBot, resumeBot, recordOutbound } from "@/lib/conversation/thread";
 import { adminDb } from "@/lib/prisma";
 import { sendText } from "@/lib/channels/whatsapp";
 import { logger } from "@/lib/logger";
+import { decrypt } from "@/lib/crypto";
 
 /**
  * Human takeover.
@@ -88,7 +89,7 @@ export async function replyAsHuman(formData: FormData): Promise<void> {
     if (account?.accessToken) {
       const sent = await sendText({
         phoneNumberId: account.externalAccountId,
-        accessToken: account.accessToken,
+        accessToken: decrypt(account.accessToken),
         to: conversation.externalThreadId,
         body,
       });

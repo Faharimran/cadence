@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { adminDb } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import { decrypt, encrypt } from "@/lib/crypto";
 
 /**
  * Webhook delivery.
@@ -19,6 +20,10 @@ const DISABLE_AFTER_FAILURES = 20;
 export function newSigningSecret(): string {
   return `whsec_${randomBytes(24).toString("base64url")}`;
 }
+
+/** Encrypted on the way into the database, decrypted only to sign. */
+export const sealSecret = encrypt;
+export const openSecret = decrypt;
 
 export function signPayload(secret: string, timestamp: number, body: string): string {
   return createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex");
@@ -84,7 +89,7 @@ export async function attemptDelivery(deliveryId: string): Promise<DeliveryOutco
 
   const body = JSON.stringify(delivery.payload);
   const timestamp = Math.floor(Date.now() / 1000);
-  const signature = signPayload(endpoint.secret, timestamp, body);
+  const signature = signPayload(openSecret(endpoint.secret), timestamp, body);
   const attempt = delivery.attempts + 1;
 
   let ok = false;

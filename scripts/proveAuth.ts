@@ -11,6 +11,7 @@
 import { adminDb } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { hashPassword, verifyPassword, passwordProblem } from "@/lib/auth/password";
+import { encrypt, decrypt, isEncrypted } from "@/lib/crypto";
 import { mintToken, readTokenValue, SESSION_COOKIE } from "@/lib/auth/session";
 
 const BASE = process.env.CADENCE_TEST_URL ?? "http://localhost:3111";
@@ -49,13 +50,51 @@ async function main() {
   check("a short password is refused", passwordProblem("short") !== null);
   check("garbage in the stored field fails closed", !(await verifyPassword("x", "nonsense")));
 
+  // ── 1b. Secrets at rest ─────────────────────────────────────────────
+  console.log("\n1b. Stored credentials");
+  const token = "EAAG-a-real-looking-whatsapp-token";
+  const sealed = encrypt(token);
+  check("ciphertext is versioned", sealed.startsWith("v1."));
+  check("the plaintext is not in it", !sealed.includes("a-real-looking"));
+  check("it round-trips", decrypt(sealed) === token);
+  check("encrypting twice gives different ciphertext", encrypt(token) !== sealed);
+  check("both still decrypt to the same thing", decrypt(encrypt(token)) === token);
+  check("plaintext is recognised as unencrypted", !isEncrypted(token));
+
+  // Authenticated encryption: a flipped byte must fail loudly rather than
+  // silently yielding garbage that then gets sent to Meta as a token.
+  const [v, iv, tag, ct] = sealed.split(".");
+  let tamperCaught = false;
+  try {
+    decrypt(`${v}.${iv}.${tag}.${ct.slice(0, -2)}AA`);
+  } catch {
+    tamperCaught = true;
+  }
+  check("a tampered ciphertext throws rather than returning garbage", tamperCaught);
+
+  // The migration affordance: a not-yet-encrypted value still reads.
+  check("legacy plaintext passes through during migration", decrypt(token) === token);
+
+  const stillClear = await adminDb.channelAccount.count();
+  const clearRows = await adminDb.channelAccount.findMany({
+    select: { accessToken: true, appSecret: true, verifyToken: true },
+  });
+  const anyClear = clearRows.some((r) =>
+    [r.accessToken, r.appSecret, r.verifyToken].some((v) => v && !isEncrypted(v)),
+  );
+  check(
+    `no stored credential is in the clear (${stillClear} account row(s))`,
+    !anyClear,
+    "run npm run db:encrypt -- --apply",
+  );
+
   // ── 2. Session tokens ───────────────────────────────────────────────
   console.log("\n2. Session tokens");
-  const token = mintToken("user_1", "tenant_1");
-  const claims = readTokenValue(token);
+  const sessionToken = mintToken("user_1", "tenant_1");
+  const claims = readTokenValue(sessionToken);
   check("a minted token decodes", claims?.userId === "user_1" && claims?.tenantId === "tenant_1");
 
-  const [payload, signature] = token.split(".");
+  const [payload, signature] = sessionToken.split(".");
   const swapped = Buffer.from(
     JSON.stringify({ userId: "user_1", tenantId: "SOMEONE_ELSE", iat: 0, exp: 9e9 }),
     "utf8",
