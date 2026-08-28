@@ -22,7 +22,9 @@
     "prove:conversation": "dotenv -e .env.local -- tsx scripts/proveConversation.ts",
     "prove": "npm run prove:engine && npm run prove:conversation",
     "live:conversation": "dotenv -e .env.local -- tsx scripts/liveConversation.ts",
-    "prove:webhook": "dotenv -e .env.local -- tsx scripts/proveWebhook.ts"
+    "prove:webhook": "dotenv -e .env.local -- tsx scripts/proveWebhook.ts",
+    "user": "dotenv -e .env.local -- tsx scripts/createUser.ts",
+    "prove:auth": "dotenv -e .env.local -- tsx scripts/proveAuth.ts"
   },
   "engines": {
     "node": ">=20.9"

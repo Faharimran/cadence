@@ -51,6 +51,7 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  users            User[]
   apiKeys          ApiKey[]
   capabilities     TenantCapability[]
   locations        Location[]
@@ -67,6 +68,41 @@ model Tenant {
   auditLogs        AuditLog[]
 
   @@index([status])
+}
+
+/// A person who signs in to the admin UI.
+///
+/// Scoped to one tenant. `email` is globally unique rather than unique per
+/// tenant, because the sign-in form asks only for an email — requiring people to
+/// also type which business they work for is a worse trade than the rare case of
+/// someone needing two logins for two businesses.
+model User {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  email        String   @unique
+  name         String?
+  /// scrypt, salted per user. Never a plain hash — see lib/auth/password.ts.
+  passwordHash String
+  role         UserRole @default(staff)
+  active       Boolean  @default(true)
+
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([tenantId, active])
+}
+
+/// Closed set — authorization branches on these, so adding one is a code change.
+enum UserRole {
+  /// Everything, including users, billing and channel credentials.
+  owner
+  /// Day-to-day configuration: services, resources, schedules, exceptions.
+  manager
+  /// Front desk: record leave and closures, work conversations, view bookings.
+  staff
 }
 
 /// An API credential. Only the hash is stored; the plaintext is shown once at

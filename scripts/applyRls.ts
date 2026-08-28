@@ -28,6 +28,7 @@ const prisma = new PrismaClient();
  * policy is a visible omission in review, not a silent gap.
  */
 const TENANT_SCOPED_TABLES = [
+  "User",
   "ApiKey",
   "TenantCapability",
   "Location",
