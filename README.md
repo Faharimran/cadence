@@ -20,7 +20,9 @@ say "3pm Thursday is free" and then actually hold it are not.
 | REST API (`/v1`) with key auth + idempotency | ✅ availability, holds, bookings |
 | Conversation layer — capability-assembled tools, snapshots, guardrails | ✅ built, 30 assertions passing |
 | Agent loop against the live model | ✅ verified end to end — books, escalates, hands over |
-| Channel adapters (WhatsApp, web) | ⬜ next |
+| WhatsApp inbound: signature, dedup, debounce, takeover guard | ✅ built, 22 assertions passing |
+| WhatsApp outbound send | ⚠️ written, needs real Meta credentials to verify |
+| Worker: agent turns + hold expiry sweep | ✅ built |
 | Connectors (brokered capabilities) | ⬜ next |
 | Admin UI | ⬜ next |
 
@@ -53,7 +55,8 @@ curl localhost:3000/api/health
 # {"status":"ok","checks":{"database":"ok",
 #  "tenantIsolation":"enforced","overlapConstraint":"present"}}
 
-npm run prove          # both harnesses
+npm run prove          # engine + conversation (no server, no API key needed)
+npm run prove:webhook  # inbound WhatsApp path (needs `npm run dev` running)
 ```
 
 `proveEngine.ts` is the engine's real specification: exception precedence, category
@@ -73,6 +76,31 @@ CI. It asserts that revoking a capability removes the corresponding tool, that a
 non-quotable price never enters the model's context at all, that an internal closure
 reason never escapes, that a lost race returns alternatives, and that escalation actually
 persists `botPaused` rather than merely reporting success.
+
+## Channels
+
+Inbound WhatsApp arrives at a single `POST /api/webhooks/whatsapp` for every tenant —
+Meta posts all traffic for an app to one URL, so `metadata.phone_number_id` is the routing
+key and `ChannelAccount` maps it to a tenant.
+
+The webhook does the minimum and returns: verify the signature over the **raw** bytes,
+record the message, enqueue a turn. The agent runs in the worker, where it can take the
+ten seconds it needs — Meta retries anything slow, and a retry becomes a duplicate reply.
+
+Three behaviours worth knowing:
+
+- **A burst becomes one turn.** People send "hi" / "are you open monday" / "for a session"
+  in four seconds. The queued job is keyed on the conversation, so each new message
+  replaces the pending one and restarts a short debounce window.
+- **Redelivery is idempotent.** Meta's message id is stored, so a redelivered batch does
+  not produce a second reply to the same question.
+- **A thread a colleague owns gets no automated reply** — but the customer's messages are
+  still recorded, so the colleague sees them. `botPaused` is re-checked in the worker, not
+  just at enqueue, because minutes can pass in between.
+
+```bash
+npm run worker         # agent turns + hold expiry sweep
+```
 
 ## API
 

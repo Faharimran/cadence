@@ -44,6 +44,7 @@ const TENANT_SCOPED_TABLES = [
   "Promotion",
   "Conversation",
   "ConversationMessage",
+  "ChannelAccount",
   "IdempotencyRecord",
   "WebhookEndpoint",
   "WebhookDelivery",

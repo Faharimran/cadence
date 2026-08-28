@@ -62,6 +62,7 @@ model Tenant {
   bookings         Booking[]
   promotions       Promotion[]
   conversations    Conversation[]
+  channelAccounts  ChannelAccount[]
   webhookEndpoints WebhookEndpoint[]
   auditLogs        AuditLog[]
 
@@ -672,6 +673,48 @@ model Conversation {
   @@unique([tenantId, channel, externalThreadId])
   @@index([tenantId, status])
   @@index([customerId])
+}
+
+/// A messaging identity a tenant owns — one WhatsApp business number, one web
+/// widget, one SMS long code.
+///
+/// This is what makes inbound routing work in a multi-tenant product. Meta posts
+/// every message for an app to ONE webhook URL; the only thing distinguishing
+/// tenants in that payload is `metadata.phone_number_id`. So that value is the
+/// lookup key, and it is globally unique by definition — two businesses cannot
+/// own the same number.
+model ChannelAccount {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  channel String // whatsapp | web | sms
+
+  /// The provider's id for this identity. For WhatsApp this is
+  /// `phone_number_id`, which arrives on every inbound payload.
+  externalAccountId String  @unique
+  displayNumber     String?
+
+  /// Credentials for sending as this identity.
+  ///
+  /// ⚠️ Plaintext today. Before this serves a real tenant they must be encrypted
+  /// at rest or moved to a secrets manager — a leaked row here lets an attacker
+  /// message that business's entire customer list. A go-live blocker, not a
+  /// nice-to-have.
+  accessToken String?
+  /// App secret, used to verify X-Hub-Signature-256 on inbound payloads.
+  appSecret   String?
+  /// Shared secret for the one-time webhook subscription handshake.
+  verifyToken String?
+
+  active Boolean @default(true)
+  config Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, channel, externalAccountId])
+  @@index([tenantId, active])
 }
 
 model ConversationMessage {
