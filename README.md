@@ -23,6 +23,7 @@ say "3pm Thursday is free" and then actually hold it are not.
 | WhatsApp inbound: signature, dedup, debounce, takeover guard | ✅ built, 22 assertions passing |
 | WhatsApp outbound send | ⚠️ written, needs real Meta credentials to verify |
 | Worker: agent turns + hold expiry sweep | ✅ built |
+| Integration surface — API keys, webhooks, capability modes | ✅ built, 21 assertions passing |
 | Connectors (brokered capabilities) | ⬜ next |
 | Admin UI — auth, hours, people, services, leave, bookings, inbox | ✅ built, 33 assertions passing |
 
@@ -58,6 +59,7 @@ curl localhost:3000/api/health
 npm run prove          # engine + conversation (no server, no API key needed)
 npm run prove:webhook  # inbound WhatsApp path (needs `npm run dev` running)
 npm run prove:auth     # admin auth + every screen renders (needs the server)
+# prove:delivery runs inside `npm run prove` — no server needed
 ```
 
 Bootstrap a login:

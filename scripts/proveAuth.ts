@@ -132,6 +132,7 @@ async function main() {
       "/admin/bookings",
       "/admin/bookings?past=1",
       "/admin/conversations",
+      "/admin/integration",
       "/admin/settings",
     ];
     for (const path of screens) {

@@ -11,6 +11,7 @@ import {
 import { runAgentTurn, isAgentConfigured } from "@/lib/conversation/agent";
 import { expireStaleHolds } from "@/lib/engine/booking";
 import { sendText, splitForDelivery } from "@/lib/channels/whatsapp";
+import { attemptDelivery, dueDeliveries } from "@/lib/webhooks/deliver";
 
 /**
  * Background workers.
@@ -23,6 +24,7 @@ import { sendText, splitForDelivery } from "@/lib/channels/whatsapp";
  */
 
 const HOLD_SWEEP_INTERVAL_MS = 60_000;
+const WEBHOOK_DRAIN_INTERVAL_MS = 5_000;
 
 const connection = createQueueConnection();
 
@@ -150,17 +152,48 @@ async function sweepExpiredHolds() {
   }
 }
 
+/**
+ * Drains the webhook outbox.
+ *
+ * Polls the table rather than consuming a queue, because the delivery rows are
+ * written in the same transaction as the booking that caused them. Nothing can
+ * be enqueued-but-lost, and a worker restart picks up exactly where it left off.
+ */
+let draining = false;
+async function drainWebhooks() {
+  if (draining) return; // never overlap two drains onto the same rows
+  draining = true;
+  try {
+    const ids = await dueDeliveries();
+    if (ids.length === 0) return;
+    const results = await Promise.allSettled(ids.map(attemptDelivery));
+    const delivered = results.filter(
+      (r) => r.status === "fulfilled" && r.value === "delivered",
+    ).length;
+    logger.info("webhook drain", { attempted: ids.length, delivered });
+  } catch (err) {
+    logger.error("webhook drain failed", {
+      err: err instanceof Error ? err.message : String(err),
+    });
+  } finally {
+    draining = false;
+  }
+}
+
 const sweepTimer = setInterval(sweepExpiredHolds, HOLD_SWEEP_INTERVAL_MS);
+const webhookTimer = setInterval(drainWebhooks, WEBHOOK_DRAIN_INTERVAL_MS);
 void sweepExpiredHolds();
+void drainWebhooks();
 
 logger.info("worker started", {
-  queues: [AGENT_TURN_QUEUE],
+  queues: [AGENT_TURN_QUEUE, "webhook-outbox"],
   agent: isAgentConfigured() ? "configured" : "NO ANTHROPIC_API_KEY — turns will fail",
 });
 
 async function shutdown(signal: string) {
   logger.info(`worker shutting down (${signal})`);
   clearInterval(sweepTimer);
+  clearInterval(webhookTimer);
   // Closing the worker waits for in-flight jobs, so a turn mid-conversation
   // finishes and the customer is not left hanging.
   await agentWorker.close();

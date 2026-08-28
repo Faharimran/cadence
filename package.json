@@ -20,11 +20,12 @@
     "seed:demo": "dotenv -e .env.local -- tsx scripts/seedDemoTenant.ts",
     "prove:engine": "dotenv -e .env.local -- tsx scripts/proveEngine.ts",
     "prove:conversation": "dotenv -e .env.local -- tsx scripts/proveConversation.ts",
-    "prove": "npm run prove:engine && npm run prove:conversation",
+    "prove": "npm run prove:engine && npm run prove:conversation && npm run prove:delivery",
     "live:conversation": "dotenv -e .env.local -- tsx scripts/liveConversation.ts",
     "prove:webhook": "dotenv -e .env.local -- tsx scripts/proveWebhook.ts",
     "user": "dotenv -e .env.local -- tsx scripts/createUser.ts",
-    "prove:auth": "dotenv -e .env.local -- tsx scripts/proveAuth.ts"
+    "prove:auth": "dotenv -e .env.local -- tsx scripts/proveAuth.ts",
+    "prove:delivery": "dotenv -e .env.local -- tsx scripts/proveWebhookDelivery.ts"
   },
   "engines": {
     "node": ">=20.9"

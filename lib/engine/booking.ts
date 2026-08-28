@@ -2,6 +2,7 @@ import type { TenantDb } from "@/lib/prisma";
 import { CadenceError, isCadenceError, translateDatabaseError } from "@/lib/api/errors";
 import { getAvailability, type Slot } from "@/lib/engine/availability";
 import { addMinutes, describeInstant } from "@/lib/engine/time";
+import { recordEvent } from "@/lib/events";
 
 /**
  * Holds and bookings.
@@ -112,6 +113,19 @@ export async function holdSlot(db: TenantDb, req: HoldRequest): Promise<HeldBook
       },
     });
 
+    await recordEvent(db, req.tenantId, "booking.created", {
+      bookingId: booking.id,
+      customerId: req.customerId,
+      serviceId: req.serviceId,
+      locationId: req.locationId,
+      startsAt: slot.startsAt.toISOString(),
+      endsAt: slot.endsAt.toISOString(),
+      status: "held",
+      expiresAt: expiresAt.toISOString(),
+      resourceIds: slot.resourceIds,
+      source: req.source ?? "api",
+    });
+
     return {
       bookingId: booking.id,
       startsAt: slot.startsAt,
@@ -172,10 +186,22 @@ export async function confirmHold(
     throw new CadenceError("hold_expired", "That hold has expired — please pick a time again.");
   }
 
-  return db.booking.update({
+  const confirmed = await db.booking.update({
     where: { id: booking.id },
     data: { status: "scheduled", holdExpiresAt: null },
   });
+
+  await recordEvent(db, args.tenantId, "booking.confirmed", {
+    bookingId: confirmed.id,
+    customerId: confirmed.customerId,
+    serviceId: confirmed.serviceId,
+    locationId: confirmed.locationId,
+    startsAt: confirmed.startsAt.toISOString(),
+    endsAt: confirmed.endsAt.toISOString(),
+    status: confirmed.status,
+  });
+
+  return confirmed;
 }
 
 /**
@@ -211,6 +237,22 @@ export async function cancelBooking(
       data: { active: false },
     }),
   ]);
+
+  await recordEvent(
+    db,
+    args.tenantId,
+    status === "needs_rebooking" ? "booking.needs_rebooking" : "booking.cancelled",
+    {
+      bookingId: updated.id,
+      customerId: updated.customerId,
+      serviceId: updated.serviceId,
+      locationId: updated.locationId,
+      startsAt: updated.startsAt.toISOString(),
+      status: updated.status,
+      reason: args.reason ?? null,
+    },
+  );
+
   return updated;
 }
 
