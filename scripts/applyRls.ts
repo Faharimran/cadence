@@ -45,6 +45,8 @@ const TENANT_SCOPED_TABLES = [
   "Promotion",
   "Conversation",
   "ConversationMessage",
+  "KnowledgeDoc",
+  "KnowledgeRevision",
   "ChannelAccount",
   "IdempotencyRecord",
   "WebhookEndpoint",
@@ -146,12 +148,12 @@ async function verify() {
     // Two tenants, created as the owner (which bypasses RLS).
     const a = await prisma.tenant.upsert({
       where: { slug: "__rls_probe_a" },
-      create: { slug: "__rls_probe_a", name: "Probe A", timezone: "UTC" },
+      create: { slug: "__rls_probe_a", name: "Probe A", timezone: "UTC", currency: "USD" },
       update: {},
     });
     const b = await prisma.tenant.upsert({
       where: { slug: "__rls_probe_b" },
-      create: { slug: "__rls_probe_b", name: "Probe B", timezone: "UTC" },
+      create: { slug: "__rls_probe_b", name: "Probe B", timezone: "UTC", currency: "USD" },
       update: {},
     });
     await prisma.location.deleteMany({ where: { tenantId: { in: [a.id, b.id] } } });

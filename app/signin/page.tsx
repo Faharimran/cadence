@@ -1,8 +1,12 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth/guard";
+import { env } from "@/lib/env";
 import { signIn } from "./actions";
 
 export const dynamic = "force-dynamic";
+
+const signupOpen = env.CADENCE_SIGNUP_OPEN === "true";
 
 export default async function SignInPage({
   searchParams,
@@ -71,6 +75,16 @@ export default async function SignInPage({
             Sign in
           </button>
         </form>
+
+        {signupOpen && (
+          <p className="mt-8 text-sm text-ink-2">
+            No account yet?{" "}
+            <Link href="/signup" className="text-accent underline underline-offset-2">
+              Set up your business
+            </Link>
+            .
+          </p>
+        )}
       </div>
     </main>
   );

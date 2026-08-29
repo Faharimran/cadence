@@ -111,6 +111,8 @@ export async function recordOutbound(
     toolTrace?: unknown;
     /** Which snapshot the agent was reading when it said this. */
     snapshotAt?: Date | null;
+    /** Knowledge articles behind this reply, as "<title> v<version>". */
+    sources?: string[];
   },
 ) {
   const [message] = await Promise.all([
@@ -123,6 +125,7 @@ export async function recordOutbound(
         body: args.body,
         toolTrace: (args.toolTrace ?? null) as never,
         snapshotAt: args.snapshotAt ?? null,
+        sources: args.sources ?? [],
       },
     }),
     db.conversation.updateMany({

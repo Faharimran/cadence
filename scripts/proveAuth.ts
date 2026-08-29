@@ -119,6 +119,16 @@ async function main() {
   const root = await get("/");
   check("/ no longer lists tenants — it just forwards", root.status === 307);
 
+  // Sign-up is the one page that must work for someone with no account at all.
+  // It sits outside the proxy's matcher deliberately, so it is worth asserting
+  // that it actually stayed reachable.
+  const signup = await get("/signup");
+  check("/signup renders for a stranger", signup.status === 200, String(signup.status));
+  check(
+    "and offers a starting point rather than a blank form",
+    signup.body.includes("What kind of business"),
+  );
+
   // ── 4. A real session ───────────────────────────────────────────────
   console.log("\n4. A real session");
   const user = await adminDb.user.findUnique({
@@ -180,6 +190,7 @@ async function main() {
       "/admin/schedules",
       "/admin/resources",
       "/admin/services",
+      "/admin/knowledge",
       "/admin/bookings",
       "/admin/bookings?past=1",
       "/admin/conversations",

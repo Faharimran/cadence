@@ -1,5 +1,5 @@
 import { requireUser, asTenant, can } from "@/lib/auth/guard";
-import { LocationForm, ExceptionTypeForm, WhatsAppForm } from "./forms";
+import { LocationForm, ExceptionTypeForm, WhatsAppForm, VoiceForm } from "./forms";
 import { Empty, PageHeader, Pill, Row, Section } from "../ui";
 
 export const dynamic = "force-dynamic";
@@ -7,8 +7,8 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const user = await requireUser();
 
-  const { locations, types, channel, users } = await asTenant(user, async (db) => {
-    const [locations, types, channel, users] = await Promise.all([
+  const { locations, types, channel, users, tenant } = await asTenant(user, async (db) => {
+    const [locations, types, channel, users, tenant] = await Promise.all([
       db.location.findMany({ where: { tenantId: user.tenantId }, orderBy: { name: "asc" } }),
       db.exceptionType.findMany({
         where: { tenantId: user.tenantId },
@@ -16,8 +16,9 @@ export default async function SettingsPage() {
       }),
       db.channelAccount.findFirst({ where: { tenantId: user.tenantId, channel: "whatsapp" } }),
       db.user.findMany({ where: { tenantId: user.tenantId }, orderBy: { email: "asc" } }),
+      db.tenant.findFirstOrThrow({ where: { id: user.tenantId } }),
     ]);
-    return { locations, types, channel, users };
+    return { locations, types, channel, users, tenant };
   });
 
   const isOwner = can(user, "owner");
@@ -29,6 +30,20 @@ export default async function SettingsPage() {
         title="Settings"
         lede={`${user.tenantName} · ${user.tenantTimezone} · ${user.tenantCurrency}`}
       />
+
+      {/* ── Voice ─────────────────────────────────────────────────── */}
+      <Section title="How the assistant speaks for you" boxed>
+        <p className="mb-4 max-w-[66ch] text-sm text-ink-2">
+          The assistant knows your services, your hours and what you&apos;ve written down — and
+          nothing else. These three fields tell it what kind of business it is answering for, how
+          to sound, and what it must never attempt on its own.
+        </p>
+        {isManager ? (
+          <VoiceForm tenant={tenant} />
+        ) : (
+          <Empty>Only managers and owners can change this.</Empty>
+        )}
+      </Section>
 
       {/* ── Locations ─────────────────────────────────────────────── */}
       <Section title="Locations" boxed>

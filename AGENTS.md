@@ -20,6 +20,13 @@ async, and route handlers are uncached by default.
    The ESLint boundary in `eslint.config.mjs` enforces the import half of this; the naming
    half is on review.
 
+   This extends past the engine to **the prompt**. What a business is, how it should sound
+   and what it refuses to answer are `Tenant.descriptor`, `Tenant.toneNote` and
+   `Tenant.escalationTopics` — never string literals in `lib/conversation/agent.ts`. The
+   test is in `scripts/proveKnowledge.ts`: a barber's prompt must not contain the word
+   "clinical". `lib/presets.ts` writes ordinary rows and is then never read again, and
+   nothing anywhere may branch on `Tenant.vertical`.
+
 2. **Never store derived availability.** There is no `isAvailable` column and there never
    will be. Availability is computed per query from three layers:
    `recurring schedule` − `exceptions` + `extra sessions` − `bookings`. A cached answer is
@@ -42,6 +49,20 @@ async, and route handlers are uncached by default.
 6. **All instants are UTC `timestamptz`; all business hours are local wall-clock strings.**
    Resolution happens at query time against the location's IANA timezone. There is no
    default timezone in this codebase — a missing timezone is an error, not an assumption.
+   Nor a default currency, for the same reason.
+
+7. **The assistant may only repeat what the business approved.** A `KnowledgeDoc` reaches a
+   customer at status `approved` and at no other; editing approved text returns it to
+   `draft`, and the last approved revision stays live until someone signs the new one off.
+   The prompt states in all three branches — empty, inline, index — that anything not
+   written down is not known. A model filling that gap from what it knows about the
+   industry is inventing a promise the business then has to honour.
+
+## What cadence is not
+
+It books **appointments** — something a customer occupies for a duration. Retail and food
+service are a different transaction (an order, with stock and fulfilment) and no preset
+bridges that gap. Say so rather than stretching the model to fit.
 
 ## Layout
 

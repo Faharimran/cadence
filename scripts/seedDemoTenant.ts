@@ -12,6 +12,7 @@
 import { adminDb } from "@/lib/prisma";
 import { randomBytes, createHash } from "node:crypto";
 import { env } from "@/lib/env";
+import { hashPassword } from "@/lib/auth/password";
 
 const SLUG = "demo-studio";
 
@@ -187,11 +188,29 @@ async function main() {
     },
   });
 
+  // The owner belongs to the fixture, not to whoever remembered to run
+  // `npm run user`. Re-seeding cascades the old one away, and proveAuth — which
+  // needs a real session to render the admin screens — would then fail on its
+  // last assertion with nothing to suggest the seed, rather than the code, was
+  // at fault.
+  await adminDb.user.upsert({
+    where: { email: "owner@demo.studio" },
+    create: {
+      tenantId: tenant.id,
+      email: "owner@demo.studio",
+      name: "Demo Owner",
+      passwordHash: await hashPassword("correct-horse-battery"),
+      role: "owner",
+    },
+    update: { tenantId: tenant.id, passwordHash: await hashPassword("correct-horse-battery") },
+  });
+
   console.log("Seeded tenant:", tenant.slug, tenant.id);
   console.log("  locations :", london.name, "(Europe/London),", dubai.name, "(Asia/Dubai)");
   console.log("  services  :", consult.name, "|", session.name);
   console.log("  types     :", types.map((t) => t.code).join(", "));
   console.log("  customer  :", customer.id);
+  console.log("  sign in   : owner@demo.studio / correct-horse-battery");
   console.log("");
   console.log("  API key   :", `${prefix}.${secret}`);
   console.log("  (shown once — the database stores only its hash)");

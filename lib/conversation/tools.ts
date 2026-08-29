@@ -7,6 +7,7 @@ import { holdSlot, confirmHold, cancelBooking } from "@/lib/engine/booking";
 import { describeInstant } from "@/lib/engine/time";
 import { isHosted, type CapabilitySet } from "@/lib/conversation/capabilities";
 import { invalidateSnapshot, type ConversationSnapshot } from "@/lib/conversation/snapshot";
+import { searchKnowledge, type KnowledgeContext } from "@/lib/knowledge";
 
 /**
  * The agent's hands.
@@ -35,8 +36,16 @@ export type ToolContext = {
   conversationId: string;
   customerId: string;
   snapshot: ConversationSnapshot;
+  /** What the business has written down, and whether it fitted in the prompt. */
+  knowledge: KnowledgeContext;
   /** Set by escalate_to_human so the caller knows to stop the bot on this thread. */
-  outcome: { escalated: boolean; escalationReasons: string[]; bookingIds: string[] };
+  outcome: {
+    escalated: boolean;
+    escalationReasons: string[];
+    bookingIds: string[];
+    /** "<title> v<n>" for every knowledge doc read this turn — reply provenance. */
+    sources: string[];
+  };
 };
 
 /** Every tool answers in this shape so the model can branch without guessing. */
@@ -354,14 +363,62 @@ export function buildTools(ctx: ToolContext) {
     );
   }
 
+  // ── Knowledge ──────────────────────────────────────────────────────
+  // Only offered when the corpus outgrew the prompt. While everything fits
+  // inline the model is already looking at it, and a tool that returns text
+  // from three paragraphs above is a round-trip bought for nothing.
+  if (ctx.caps.has("knowledge") && ctx.knowledge.mode === "index") {
+    tools.push(
+      betaZodTool({
+        name: "search_knowledge",
+        description:
+          "Look up what this business has written about how it works — procedures, preparation, aftercare, policies. " +
+          "The titles you were given are the complete list of what exists: search using the words from one of them, " +
+          "or the customer's own words. " +
+          "Quote or closely paraphrase what comes back; if it returns nothing, the business has not written that down, " +
+          "so say you'll check with a colleague rather than answering from general knowledge.",
+        inputSchema: z.object({
+          query: z.string().min(2).describe("The customer's question, or a title from the list."),
+          tags: z.array(z.string()).optional().describe("Optional tags to narrow to."),
+        }),
+        run: async ({ query, tags }) => {
+          try {
+            const found = await searchKnowledge(ctx.db, ctx.tenantId, { query, tags, limit: 3 });
+            // Recorded whether or not the model ends up using it. "Which article
+            // was the bot reading when it said that" needs to be answerable from
+            // the message row alone, months later.
+            for (const doc of found) ctx.outcome.sources.push(`${doc.title} v${doc.version}`);
+
+            if (found.length === 0) {
+              return json({
+                ok: false,
+                reason: "not_documented",
+                message:
+                  "Nothing written down about that. Do not answer from general knowledge — " +
+                  "say you'll check and offer to have a colleague confirm.",
+                recoverable: true,
+              });
+            }
+            return json({
+              ok: true,
+              articles: found.map((d) => ({ title: d.title, body: d.body, tags: d.tags })),
+            });
+          } catch (err) {
+            return json(fail(err));
+          }
+        },
+      }),
+    );
+  }
+
   // ── Escalation — always available ──────────────────────────────────
   tools.push(
     betaZodTool({
       name: "escalate_to_human",
       description:
         "Hand this conversation to a person and stop replying. Use when the customer asks for a human, is upset, " +
-        "asks something clinical or contractual you should not answer, negotiates on price, or when a tool has failed " +
-        "in a way you cannot work around. Escalating is always safer than guessing.",
+        "negotiates on price, raises anything on this business's hand-over list, or when a tool has failed in a way " +
+        "you cannot work around. Escalating is always safer than guessing.",
       inputSchema: z.object({
         reasons: z
           .array(

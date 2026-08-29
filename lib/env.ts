@@ -29,6 +29,12 @@ const schema = z.object({
    */
   CADENCE_ENCRYPTION_KEY: z.string().min(16).optional(),
   CADENCE_BASE_URL: z.string().url().default("http://localhost:3000"),
+  /**
+   * Whether anyone may create a business at /signup. Open by default — a product
+   * you cannot sign up for is a bespoke install. Set "false" on a deployment
+   * that onboards customers by hand, and the route 404s.
+   */
+  CADENCE_SIGNUP_OPEN: z.enum(["true", "false"]).default("true"),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });
 

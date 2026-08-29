@@ -5,6 +5,7 @@ import {
   createLocation,
   createExceptionType,
   saveWhatsAppAccount,
+  saveVoice,
   type SettingsFormState,
 } from "./actions";
 import { Button, Field, inputClass } from "../ui";
@@ -23,6 +24,56 @@ function Feedback({ state }: { state: SettingsFormState }) {
       </p>
     );
   return null;
+}
+
+const textareaClass = `${inputClass} min-h-[6rem] resize-y font-sans leading-relaxed`;
+
+export function VoiceForm({
+  tenant,
+}: {
+  tenant: { name: string; descriptor: string | null; toneNote: string | null; escalationTopics: string[] };
+}) {
+  const [state, action, pending] = useActionState<SettingsFormState, FormData>(saveVoice, null);
+
+  return (
+    <form action={action} className="flex flex-col gap-4">
+      <Field
+        label={`What ${tenant.name} is`}
+        hint="A sentence or two, as you'd describe it to someone new. The assistant is otherwise only told your name."
+      >
+        <textarea name="descriptor" defaultValue={tenant.descriptor ?? ""} className={textareaClass} />
+      </Field>
+
+      <Field
+        label="How it should write"
+        hint="Left blank, it writes like a brief, warm receptionist."
+      >
+        <input
+          name="toneNote"
+          defaultValue={tenant.toneNote ?? ""}
+          className={inputClass}
+          placeholder="Friendly and short, first names."
+        />
+      </Field>
+
+      <Field
+        label="Always pass these to a person"
+        hint="One per line, in your own words. The assistant hands over instead of answering — it never guesses at these."
+      >
+        <textarea
+          name="escalationTopics"
+          defaultValue={tenant.escalationTopics.join("\n")}
+          className={textareaClass}
+          placeholder={"anything about a refund\nwhether something is safe"}
+        />
+      </Field>
+
+      <Feedback state={state} />
+      <Button type="submit" disabled={pending}>
+        {pending ? "Saving…" : "Save"}
+      </Button>
+    </form>
+  );
 }
 
 export function LocationForm({ suggested }: { suggested: string }) {

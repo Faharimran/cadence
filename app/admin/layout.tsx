@@ -17,6 +17,7 @@ const NAV = [
   { href: "/admin/schedules", label: "Opening hours" },
   { href: "/admin/resources", label: "People & rooms" },
   { href: "/admin/services", label: "Services" },
+  { href: "/admin/knowledge", label: "What you tell customers" },
   { href: "/admin/bookings", label: "Bookings" },
   { href: "/admin/conversations", label: "Conversations" },
   { href: "/admin/integration", label: "Other software" },

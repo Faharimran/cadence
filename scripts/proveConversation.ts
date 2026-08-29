@@ -14,6 +14,7 @@ import { resolveCapabilities } from "@/lib/conversation/capabilities";
 import { getSnapshot, invalidateSnapshot } from "@/lib/conversation/snapshot";
 import { buildTools, type ToolContext } from "@/lib/conversation/tools";
 import { openThread, recordInbound } from "@/lib/conversation/thread";
+import { buildKnowledgeContext } from "@/lib/knowledge";
 import { localToInstant } from "@/lib/engine/time";
 
 let passed = 0;
@@ -59,10 +60,11 @@ async function makeCtx(
     db,
     caps,
     snapshot,
+    knowledge: await buildKnowledgeContext(db, tenantId),
     tenantId,
     conversationId,
     customerId,
-    outcome: { escalated: false, escalationReasons: [], bookingIds: [] },
+    outcome: { escalated: false, escalationReasons: [], bookingIds: [], sources: [] },
   };
   return { ctx, tools: buildTools(ctx) };
 }

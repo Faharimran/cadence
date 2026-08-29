@@ -9,6 +9,63 @@ import { encrypt } from "@/lib/crypto";
 export type SettingsFormState = { error?: string; ok?: string } | null;
 
 /**
+ * How the business wants to be spoken for.
+ *
+ * These three fields are the difference between a clinic's assistant and a
+ * barber's. They used to be sentences hardcoded in the agent — which meant every
+ * customer inherited a hair clinic's caution about anything "clinical", whether
+ * they were a hair clinic or not. Moving them here is what lets one engine serve
+ * businesses that have nothing in common.
+ */
+const SaveVoice = z.object({
+  descriptor: z.string().max(1200),
+  toneNote: z.string().max(600),
+  escalationTopics: z.string().max(2000),
+});
+
+export async function saveVoice(
+  _previous: SettingsFormState,
+  formData: FormData,
+): Promise<SettingsFormState> {
+  const user = await requireRole("manager");
+
+  const parsed = SaveVoice.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+
+  // One topic per line — the field is a list of things a person typed, and
+  // asking them to comma-separate sentences that contain commas is a trap.
+  const topics = parsed.data.escalationTopics
+    .split("\n")
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .slice(0, 25);
+
+  return asTenant(user, async (db) => {
+    await db.tenant.update({
+      where: { id: user.tenantId },
+      data: {
+        descriptor: parsed.data.descriptor.trim() || null,
+        toneNote: parsed.data.toneNote.trim() || null,
+        escalationTopics: topics,
+      },
+    });
+
+    await db.auditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actor: `user:${user.id}`,
+        action: "tenant.voice_updated",
+        subject: `Tenant:${user.tenantId}`,
+        after: { escalationTopics: topics.length },
+      },
+    });
+
+    revalidatePath("/admin/settings");
+    return { ok: "Saved. It applies to the next message a customer sends." };
+  });
+}
+
+/**
  * Locations.
  *
  * Timezone is required and validated. There is no default anywhere in this

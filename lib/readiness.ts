@@ -35,7 +35,7 @@ export type Readiness = {
 };
 
 export async function assessReadiness(db: TenantDb, tenantId: string): Promise<Readiness> {
-  const [locations, resources, services, rules, channel, exceptionTypes] = await Promise.all([
+  const [locations, resources, services, rules, channel, exceptionTypes, knowledge] = await Promise.all([
     db.location.count({ where: { tenantId, active: true } }),
     db.resource.findMany({
       where: { tenantId, active: true },
@@ -51,7 +51,17 @@ export async function assessReadiness(db: TenantDb, tenantId: string): Promise<R
       select: { accessToken: true },
     }),
     db.exceptionType.count({ where: { tenantId, active: true } }),
+    db.knowledgeDoc.groupBy({
+      by: ["status"],
+      where: { tenantId },
+      _count: { _all: true },
+    }),
   ]);
+
+  const countByStatus = (status: string) =>
+    knowledge.find((k) => k.status === status)?._count._all ?? 0;
+  const approvedDocs = countByStatus("approved");
+  const draftDocs = countByStatus("draft");
 
   const withoutHours = resources.filter((r) => r._count.scheduleRules === 0);
   const withoutRequirements = services.filter((s) => s.requirements.length === 0);
@@ -108,6 +118,22 @@ export async function assessReadiness(db: TenantDb, tenantId: string): Promise<R
       todo:
         exceptionTypes === 0
           ? "Add the words you use — leave, closed, theatre day — so staff can record them."
+          : undefined,
+    },
+    {
+      // Not required to take a booking, which is why it sits below the line —
+      // but it is the difference between an assistant that books and one that
+      // can actually answer a question. Named for what its absence costs.
+      id: "knowledge",
+      title: "Write down what you tell customers",
+      href: "/admin/knowledge",
+      done: approvedDocs > 0,
+      required: false,
+      todo:
+        approvedDocs === 0
+          ? draftDocs > 0
+            ? `${draftDocs} article${draftDocs === 1 ? " is" : "s are"} written but not approved, so the assistant still cannot see ${draftDocs === 1 ? "it" : "them"}.`
+            : "Nothing written down yet, so every question about how things work goes to a colleague."
           : undefined,
     },
     {

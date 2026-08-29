@@ -14,6 +14,7 @@ import { adminDb, withTenant } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { isAgentConfigured, runAgentTurn } from "@/lib/conversation/agent";
 import { openThread, recordInbound } from "@/lib/conversation/thread";
+import { buildKnowledgeContext } from "@/lib/knowledge";
 
 /**
  * Which tenant to talk to, and what to say. Override with:
@@ -32,13 +33,23 @@ const SCRIPTS: Record<string, { slug: string; phone: string; says: string[] }> =
   // Written the way a real enquiry arrives: no punctuation, Hinglish, and the
   // price question first — which is exactly the one the clinic's rulebook says
   // must never be answered with a surgical total.
+  //
+  // The four messages probe four different behaviours in order:
+  //   1. a price the clinic withholds        → must not be stated
+  //   2. a question the clinic HAS written   → must be answered from it
+  //   3. an ordinary booking                 → must hold before promising
+  //   4. a clinical question                 → must hand over, not estimate
   cara: {
     slug: "cara-clinic",
     phone: "+919820011223",
+    // Order matters: escalation PAUSES the thread, so anything after the
+    // hand-over is never sent. The probes that must actually run therefore come
+    // first, and the two that should escalate come last.
     says: [
-      "hi i am losing hair badly from front. how much for hair transplant?",
-      "ok. can i come for consultation this week? santacruz is closer for me",
-      "saturday morning is good",
+      "hi i am losing hair badly from front. what actually happens in the consultation? do i need to prepare anything",
+      "ok good. can i come saturday morning? santacruz is closer for me",
+      "yes book that",
+      "thanks. and how many grafts will i need for my hairline?",
     ],
   },
 };
@@ -115,11 +126,14 @@ async function main() {
       console.log(`     tool   ${c.name}(${summarise(c.input)})`);
     }
     console.log(`     agent  ${turn.reply ?? "(no reply)"}`);
+    const cached = turn.usage?.cacheRead ?? 0;
+    const written = turn.usage?.cacheWrite ?? 0;
     console.log(
       `            ${elapsed}s · ${turn.usage?.input ?? 0} in / ${turn.usage?.output ?? 0} out` +
+        (cached || written ? ` · cache ${cached} read, ${written} written` : "") +
         (turn.escalated ? ` · ESCALATED (${turn.escalationReasons.join(", ")})` : ""),
     );
-    totalIn += turn.usage?.input ?? 0;
+    totalIn += (turn.usage?.input ?? 0) + cached + written;
     totalOut += turn.usage?.output ?? 0;
   }
 
@@ -146,6 +160,25 @@ async function main() {
     where: { conversationId: thread.conversationId, direction: "outbound", snapshotAt: { not: null } },
   });
   console.log(`replies with snapshot provenance recorded: ${audited}`);
+
+  // Which articles the assistant actually read, at which version. This is the
+  // record that answers "your bot told me X" months later.
+  const cited = await adminDb.conversationMessage.findMany({
+    where: { conversationId: thread.conversationId, direction: "outbound" },
+    select: { sources: true },
+  });
+  const allSources = [...new Set(cited.flatMap((m) => m.sources))];
+  const knowledge = await withTenant(t, (db) => buildKnowledgeContext(db, t));
+  console.log(
+    allSources.length > 0
+      ? `knowledge cited: ${allSources.join(" · ")}`
+      : knowledge.mode === "inline"
+        ? // Not a gap in the recording. Below the size threshold the whole
+          // corpus is in the prompt and there is no lookup step to record; only
+          // once it grows past that does per-reply citation become meaningful.
+          `knowledge cited: n/a — all ${knowledge.entries.length} articles were in the prompt, so there was nothing to look up`
+        : "knowledge cited: none — the assistant did not consult an article",
+  );
   console.log(`tokens: ${totalIn} in / ${totalOut} out`);
   console.log("─".repeat(72));
 }

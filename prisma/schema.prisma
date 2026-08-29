@@ -39,7 +39,11 @@ model Tenant {
 
   /// ISO-4217. Money is stored everywhere as an integer in the currency's minor
   /// unit (paise, cents) so no float rounding ever touches a price.
-  currency String @default("INR")
+  ///
+  /// Deliberately has no default. It used to default to INR — harmless while
+  /// there was one customer in Mumbai, and exactly the kind of assumption that
+  /// silently prices a London barber in rupees. Onboarding asks.
+  currency String
 
   /// Tax presentation is per-tenant, not per-country-we-guessed. `taxLabel` is what
   /// the customer sees ("GST", "VAT"); `taxRate` is a percentage; `taxInclusive`
@@ -47,6 +51,33 @@ model Tenant {
   taxLabel     String? // null = don't show tax at all
   taxRate      Float   @default(0)
   taxInclusive Boolean @default(true)
+
+  // ── How this business wants to be spoken for ──────────────────────
+  // Everything below is prompt material. It exists because the difference
+  // between a hair clinic and a barber is not schema — both put a person in a
+  // chair for a duration — it is what the business knows, what it refuses to
+  // say, and how it says it. Holding that as tenant data rather than as string
+  // literals in agent.ts is what stops the engine acquiring a vertical.
+
+  /// One or two sentences on what this place is, in the owner's words. The
+  /// assistant is otherwise told only a business name, which is not enough to
+  /// know whether "do you take walk-ins?" is even a sensible question.
+  descriptor String?
+
+  /// How to write. Free text rather than an enum, because "warm and brief" and
+  /// "formal, always use Mr/Ms" are both legitimate and neither is a checkbox.
+  toneNote String?
+
+  /// Subjects that must always go to a person, in the business's own words. A
+  /// clinic needs "anything clinical"; a garage needs "quoting a repair before
+  /// we've seen the car"; a barber may need none. Shipping the clinic's list to
+  /// every tenant is the mistake this replaces.
+  escalationTopics String[] @default([])
+
+  /// Which preset this tenant was created from ("clinic", "barber", …).
+  /// Provenance and presentation ONLY. Nothing in the engine or the agent may
+  /// branch on it, or the vertical is back in the code where it does not belong.
+  vertical String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -66,6 +97,7 @@ model Tenant {
   channelAccounts  ChannelAccount[]
   webhookEndpoints WebhookEndpoint[]
   auditLogs        AuditLog[]
+  knowledgeDocs    KnowledgeDoc[]
 
   @@index([status])
 }
@@ -779,6 +811,105 @@ model ConversationMessage {
 
   @@index([conversationId, createdAt])
   @@index([externalId])
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Knowledge — what the business knows, in its own words
+// ══════════════════════════════════════════════════════════════════════
+
+/// A single thing the business knows and is willing to have repeated.
+///
+/// This is where a vertical actually lives. The schema cannot tell a barber from
+/// a clinic — both book a person into a chair for a duration — but their answers
+/// to "what should I expect?" have nothing in common. Rather than modelling
+/// hair-transplant aftercare or fade types, cadence models *the business having
+/// written something down*, and the difference between verticals becomes rows.
+///
+/// Three rules, in descending order of how much trouble they save:
+///
+///  1. **Only `approved` is ever readable by the assistant.** A draft is not
+///     ranked lower, it is absent — the search tool filters on status, so an
+///     unreviewed paragraph cannot reach a customer even if the model asks for
+///     it by name.
+///
+///  2. **Editing an approved doc returns it to draft.** Changing aftercare
+///     advice and having it go live unread is precisely the failure that makes
+///     an approval step worth having. The old text stays live until someone
+///     signs off the new one — see KnowledgeRevision.
+///
+///  3. **The model may quote it, never summarise the business into existence.**
+///     Anything not written here is not known, and the prompt says so.
+model KnowledgeDoc {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Phrased as the customer would ask it — "How long does recovery take?" —
+  /// because the title is matched against their question, so it earns its keep.
+  title String
+  /// Markdown, written by the business. Never generated, never edited by us.
+  body  String
+
+  /// Free vocabulary, tenant's own. Used to narrow a search and to group the
+  /// list screen. Open on purpose, like Resource.tags.
+  tags String[] @default([])
+
+  status KnowledgeStatus @default(draft)
+
+  /// Bumped every time an edit is approved. Quoted in provenance so "what did
+  /// the bot tell people in August" has an answer.
+  version Int @default(1)
+
+  /// Attribution follows the ScheduleException convention: plain ids, not
+  /// relations. A user who leaves is deactivated, not deleted, and their name
+  /// resolves at read time.
+  authorId     String?
+  approvedById String?
+  approvedAt   DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  revisions KnowledgeRevision[]
+
+  /// Two docs with the same title is always a mistake — someone edited a copy.
+  @@unique([tenantId, title])
+  @@index([tenantId, status])
+}
+
+enum KnowledgeStatus {
+  /// Written, not signed off. Invisible to the assistant.
+  draft
+  /// Signed off. The only status the search tool will return.
+  approved
+  /// Retired but kept, because a conversation three months ago cited it.
+  archived
+}
+
+/// The text exactly as it was at one approved version.
+///
+/// Not an audit nicety: `ConversationMessage.sources` records which doc AND
+/// version a reply drew on, and that reference is worthless if the doc has been
+/// rewritten since. This is what lets you answer "your bot told me I could
+/// shower on day two" by showing what the bot was actually reading.
+model KnowledgeRevision {
+  id       String @id @default(cuid())
+  tenantId String
+
+  docId String
+  doc   KnowledgeDoc @relation(fields: [docId], references: [id], onDelete: Cascade)
+
+  version Int
+  title   String
+  body    String
+
+  authorId     String?
+  approvedById String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([docId, version])
+  @@index([tenantId])
 }
 
 // ══════════════════════════════════════════════════════════════════════

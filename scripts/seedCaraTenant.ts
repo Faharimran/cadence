@@ -34,6 +34,21 @@ async function main() {
       taxLabel: "GST",
       taxRate: 5,
       taxInclusive: false,
+      vertical: "clinic",
+      // These three used to be sentences hardcoded in agent.ts, which meant a
+      // barber inherited a hair clinic's caution about anything "clinical".
+      // They are tenant data now, and this is what a clinic fills them with.
+      descriptor:
+        "A hair and skin clinic in Mumbai. Patients come first for a consultation, and treatments " +
+        "range from a single PRP session to a full-day transplant that occupies both a surgeon and " +
+        "the theatre.",
+      toneNote:
+        "Write like a careful receptionist: warm, clear, never clinical. Do not reassure about results.",
+      escalationTopics: [
+        "anything clinical — suitability, graft counts, risks, medication, recovery",
+        "the total cost of a transplant, as opposed to the fixed consultation fee",
+        "anything a patient describes as urgent, painful or going wrong",
+      ],
     },
   });
 
@@ -46,6 +61,7 @@ async function main() {
         ["booking_read", 60],
         ["booking_write", 60],
         ["promotions", 900],
+        ["knowledge", 21_600],
       ] as const
     ).map(([capability, ttl]) => ({
       tenantId: tenant.id,
@@ -233,7 +249,67 @@ async function main() {
     },
   });
 
-  await adminDb.user.upsert({
+  // ── What the clinic will let the assistant say ──────────────────────
+  //
+  // Written the way a clinic actually would: answering the question a patient
+  // asks, and stopping short of anything a clinician should say in person. The
+  // last one is the interesting case — it is an article whose entire job is to
+  // decline, so that "how many grafts do I need" produces a good hand-over
+  // rather than an improvised number.
+  const articles: { title: string; body: string; tags: string[] }[] = [
+    {
+      title: "What happens at a first consultation?",
+      body:
+        "Your first visit takes about thirty minutes. One of our doctors looks at your scalp, " +
+        "asks about your family history and any medication you're on, and talks through what " +
+        "would suit you.\n\n" +
+        "You don't need to prepare anything. Come with your hair as it normally is — not freshly " +
+        "oiled — and bring a list of any medicines you take.\n\n" +
+        "The consultation fee is ₹2,000. If you go ahead with a treatment afterwards, that's " +
+        "discussed separately at the clinic.",
+      tags: ["visiting", "consultation"],
+    },
+    {
+      title: "How long does a hair transplant take on the day?",
+      body:
+        "A Sapphire FUE transplant is a full day at the clinic — you'll be with us from the " +
+        "morning until late afternoon. You're awake throughout, under local anaesthetic, and " +
+        "there are breaks for food.\n\n" +
+        "Bring a button-up shirt rather than something you pull over your head, and arrange for " +
+        "someone to take you home. You won't be able to drive yourself.",
+      tags: ["preparing", "transplant"],
+    },
+    {
+      title: "What is PRP and how many sessions will I need?",
+      body:
+        "PRP uses a small sample of your own blood, spun to concentrate the platelets, which is " +
+        "then injected into the scalp. A session takes about forty-five minutes.\n\n" +
+        "Most people have it as a course rather than a one-off, but how many sessions suits you " +
+        "is something the doctor decides after seeing your scalp — it isn't the same for " +
+        "everyone. Ask at your consultation.",
+      tags: ["treatment", "prp"],
+    },
+    {
+      title: "Where are the clinics and how do I get there?",
+      body:
+        "We have two branches. Santacruz is the main one and has the theatre, so all surgery " +
+        "happens there. Juhu handles consultations and skin treatments.\n\n" +
+        "Both are a short auto ride from the station. Tell us which is easier for you and we'll " +
+        "book you in there.",
+      tags: ["visiting", "locations"],
+    },
+    {
+      title: "Can you tell me if I'm suitable for a transplant?",
+      body:
+        "Not over a message, no — and we'd rather say that plainly than guess.\n\n" +
+        "Whether a transplant will work well for you depends on the pattern of loss, how stable " +
+        "it is, and what your donor area looks like. That needs a doctor to see it. Book a " +
+        "consultation and you'll get a real answer in thirty minutes.",
+      tags: ["consultation", "suitability"],
+    },
+  ];
+
+  const owner = await adminDb.user.upsert({
     where: { email: "owner@cara.clinic" },
     create: {
       tenantId: tenant.id,
@@ -244,6 +320,33 @@ async function main() {
     },
     update: { tenantId: tenant.id, passwordHash: await hashPassword("correct-horse-battery") },
   });
+
+  for (const article of articles) {
+    const doc = await adminDb.knowledgeDoc.create({
+      data: {
+        tenantId: tenant.id,
+        title: article.title,
+        body: article.body,
+        tags: article.tags,
+        // Approved, because this fixture stands in for a clinic that has already
+        // reviewed its own content. A brand-new tenant gets drafts instead, and
+        // that difference is the point of the approval step.
+        status: "approved",
+        approvedById: owner.id,
+        approvedAt: new Date(),
+      },
+    });
+    await adminDb.knowledgeRevision.create({
+      data: {
+        tenantId: tenant.id,
+        docId: doc.id,
+        version: 1,
+        title: article.title,
+        body: article.body,
+        approvedById: owner.id,
+      },
+    });
+  }
 
   console.log(`Seeded ${tenant.name} (${tenant.slug})`);
   console.log(`  locations : Santacruz, Juhu — Asia/Kolkata`);
