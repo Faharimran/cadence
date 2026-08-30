@@ -117,7 +117,18 @@ async function main() {
   check("a forged cookie does not get in", forged.status === 307, String(forged.status));
 
   const root = await get("/");
-  check("/ no longer lists tenants — it just forwards", root.status === 307);
+  check("/ is a public page", root.status === 200, String(root.status));
+  check(
+    "and it leads with what the product actually does",
+    root.body.includes("You approve"),
+  );
+  // The reason / stopped being an operator console: it enumerated every tenant
+  // on the admin connection, which row-level security deliberately does not
+  // protect. A marketing page must not quietly reintroduce that.
+  check(
+    "it does NOT enumerate tenants",
+    !root.body.includes("cara-clinic") && !root.body.includes("demo-studio"),
+  );
 
   // Sign-up is the one page that must work for someone with no account at all.
   // It sits outside the proxy's matcher deliberately, so it is worth asserting

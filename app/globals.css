@@ -37,7 +37,65 @@
   }
 }
 
+/* ───────────────────────────────────────────────────────────────────────
+   Marketing tokens — the public page at / and nothing else.
+
+   A deliberate extension of the palette above rather than a second identity:
+   --signal IS the admin's accent, so someone who signs up does not land
+   somewhere that looks like a different company. What this adds is depth (a
+   dark blue ground the admin never uses) and one high-energy accent.
+
+   --lime is the page's single loud note, spent on primary action and on the
+   one number worth staring at. It is NOT semantic and must never carry state —
+   that is what --ok / --warn / --bad are for, and reusing it for decoration is
+   how a colour stops meaning anything.
+
+   Fixed across colour schemes on purpose. The hero is a dark surface in both,
+   so text on it cannot be a token that flips.
+   ─────────────────────────────────────────────────────────────────────── */
+:root {
+  --deep: #071a2f;
+  --deep-2: #0d2c4d;
+  --signal: #2563c9;
+  --sky: #4a9df0;
+  --lime: #c8f751;
+  --lime-ink: #16240a;
+  --on-deep: #eaf2fb;
+  --on-deep-2: #9dbadb;
+  --on-deep-3: #5f83ab;
+
+  /* The marketing page's own light surfaces, which do NOT follow the OS.
+     Its whole structure is dark hero → light body → dark section → light body,
+     and that rhythm is the design. Letting the light half flip in dark mode
+     collapses every section onto the same near-black and the page reads as one
+     undifferentiated field. The admin still adapts; a brand surface commits. */
+  --m-paper: #f4f7fa;
+  --m-surface: #ffffff;
+  --m-surface-2: #e8edf3;
+  --m-rule: #d3dce6;
+  --m-ink: #101b26;
+  --m-ink-2: #47586a;
+  --m-ink-3: #74879c;
+}
+
 @theme inline {
+  --color-deep: var(--deep);
+  --color-deep-2: var(--deep-2);
+  --color-signal: var(--signal);
+  --color-sky: var(--sky);
+  --color-lime: var(--lime);
+  --color-lime-ink: var(--lime-ink);
+  --color-on-deep: var(--on-deep);
+  --color-on-deep-2: var(--on-deep-2);
+  --color-on-deep-3: var(--on-deep-3);
+  --color-m-paper: var(--m-paper);
+  --color-m-surface: var(--m-surface);
+  --color-m-surface-2: var(--m-surface-2);
+  --color-m-rule: var(--m-rule);
+  --color-m-ink: var(--m-ink);
+  --color-m-ink-2: var(--m-ink-2);
+  --color-m-ink-3: var(--m-ink-3);
+  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
   --color-paper: var(--paper);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -55,4 +113,71 @@ html,
 body {
   background: var(--paper);
   color: var(--ink);
+}
+
+/* ── Marketing page only ────────────────────────────────────────────── */
+
+/**
+ * The hero ground.
+ *
+ * The reference this borrows from uses a photograph of sky. A stock photo says
+ * nothing about what the product is, so this is built from cadence's own
+ * subject instead: a field of time. The horizontal rules are hours, the
+ * vertical ones are days, and the whole grid recedes — the calendar the
+ * assistant is answering against, rather than weather.
+ */
+.field {
+  background:
+    radial-gradient(120% 80% at 50% 0%, #17518f 0%, transparent 60%),
+    radial-gradient(90% 60% at 85% 15%, #1c6bb8 0%, transparent 55%),
+    linear-gradient(180deg, var(--deep-2) 0%, var(--deep) 70%);
+}
+
+.field-grid {
+  background-image:
+    linear-gradient(to right, rgba(154, 200, 255, 0.13) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(154, 200, 255, 0.09) 1px, transparent 1px);
+  background-size: 88px 52px;
+  /* Tilted away from the reader so the grid reads as a surface receding rather
+     than as graph paper laid over the text. */
+  transform: perspective(900px) rotateX(56deg) scale(2.1);
+  transform-origin: 50% 100%;
+  mask-image: linear-gradient(to top, #000 0%, transparent 78%);
+}
+
+/* Slots scattered on the field. A handful are lime — the free ones. */
+@keyframes slot-breathe {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.9; }
+}
+
+.slot {
+  animation: slot-breathe 6s ease-in-out infinite;
+}
+
+@keyframes drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.drift {
+  animation: drift 7s ease-in-out infinite;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.rise {
+  animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Motion here is atmosphere, never information — so removing it costs nothing. */
+@media (prefers-reduced-motion: reduce) {
+  .slot,
+  .drift,
+  .rise {
+    animation: none;
+  }
 }
