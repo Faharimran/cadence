@@ -182,12 +182,29 @@ export async function createExceptionType(
  * list. The form says so, because a person entering a token deserves to know
  * where it lands.
  */
+/**
+ * Every limit names its own field.
+ *
+ * Zod's default is "Too big: expected string to have <=200 characters", which
+ * is true and useless — it does not say which of four boxes is wrong, and the
+ * most likely cause is an access token pasted into the app secret field, where
+ * the length is the only clue anything is amiss.
+ */
 const SaveChannel = z.object({
-  externalAccountId: z.string().min(1, "Enter the phone number ID."),
-  displayNumber: z.string().max(30),
-  accessToken: z.string().max(500),
-  appSecret: z.string().max(200),
-  verifyToken: z.string().max(200),
+  externalAccountId: z
+    .string()
+    .min(1, "Enter the phone number ID — the long number under the phone number, not the number itself.")
+    .max(60, "That looks too long for a phone number ID. Check you copied the ID and not the access token."),
+  displayNumber: z.string().max(30, "That is too long for a phone number."),
+  accessToken: z
+    .string()
+    .max(500, "That access token is unusually long — check you pasted the right value."),
+  appSecret: z
+    .string()
+    .max(200, "That is too long for an app secret. An app secret is about 32 characters; you may have pasted the access token."),
+  verifyToken: z
+    .string()
+    .max(200, "That is too long for a verify token. It is the short password you chose, not one of Meta's values."),
 });
 
 export async function saveWhatsAppAccount(

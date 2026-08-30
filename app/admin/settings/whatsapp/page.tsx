@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createHmac } from "node:crypto";
 import { requireUser, asTenant, can } from "@/lib/auth/guard";
+import { decrypt } from "@/lib/crypto";
 import { env } from "@/lib/env";
 import { WhatsAppForm } from "../forms";
 import { CopyBox } from "./CopyBox";
@@ -56,6 +57,32 @@ export default async function WhatsAppGuidePage() {
 
   const connected = Boolean(channel?.accessToken && channel.active);
   const isOwner = can(user, "owner");
+
+  /**
+   * The saved verify token, shown back to the owner.
+   *
+   * A deliberate exception to "secrets are never shown again". This is the one
+   * value that has to be typed identically into two systems, and when it does
+   * not match, Meta says only "the callback URL or verify token couldn't be
+   * validated" — naming neither. With nothing on this page to compare against,
+   * the mismatch is invisible and the product looks broken. That cost is real
+   * and the exposure is not: unlike the app secret and the access token, this
+   * one grants nothing. It is a nonce for a single setup handshake, useless to
+   * anybody who is not Meta calling this exact URL.
+   *
+   * Owner-only, like the form it sits above.
+   */
+  let savedVerifyToken: string | null = null;
+  if (isOwner && channel?.verifyToken) {
+    try {
+      savedVerifyToken = decrypt(channel.verifyToken);
+    } catch {
+      // Undecryptable means the encryption key changed since it was saved.
+      // Leaving it null falls through to offering a fresh suggestion, which is
+      // the right recovery — they have to re-enter it either way.
+      savedVerifyToken = null;
+    }
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -136,8 +163,20 @@ export default async function WhatsAppGuidePage() {
         </p>
         <div className="flex flex-col gap-4">
           <CopyBox label="Callback URL" value={callbackUrl} />
-          <CopyBox label="Verify token — we made one up for you" value={suggestedToken} />
+          {savedVerifyToken ? (
+            <CopyBox label="Verify token — the one you saved" value={savedVerifyToken} />
+          ) : (
+            <CopyBox label="Verify token — we made one up for you" value={suggestedToken} />
+          )}
         </div>
+
+        {savedVerifyToken && (
+          <Callout tone="warn" title="Meta must have this exact text.">
+            This is what cadence has stored, shown so you can check it against what you typed into
+            Meta. If they differ by even one character, Meta reports that the callback URL could
+            not be validated — and neither screen tells you which half is wrong.
+          </Callout>
+        )}
         <p className="mt-3 max-w-[72ch] text-[12px] text-ink-3">
           The verify token is a password you make up. Meta does not care what it says — it exists so
           cadence can tell that a webhook call is really yours. Put the <em>same</em> text in both
