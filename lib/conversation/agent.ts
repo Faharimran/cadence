@@ -7,7 +7,7 @@ import { CadenceError } from "@/lib/api/errors";
 import { resolveCapabilities } from "@/lib/conversation/capabilities";
 import { getSnapshot } from "@/lib/conversation/snapshot";
 import { buildTools, type ToolContext } from "@/lib/conversation/tools";
-import { loadTranscript, recordOutbound } from "@/lib/conversation/thread";
+import { loadTranscript, recordOutbound, COLLEAGUE_PREFIX } from "@/lib/conversation/thread";
 import { buildKnowledgeContext, type KnowledgeContext } from "@/lib/knowledge";
 
 /**
@@ -234,6 +234,9 @@ If a hold fails, the result usually carries alternative times. Offer one in the 
 - Never describe the terms of an offer in your own words, or work out what a discount comes to. Use the wording the tool returned, or say a colleague will explain.
 - Never invent an availability, a policy, or a member of staff. If you do not have it, you do not know it.
 - Never repeat an internal note. Anything the tools give you is safe to say; anything you inferred about why the business is closed is not.
+
+## When a colleague has been in the thread
+A turn beginning "${COLLEAGUE_PREFIX.trim()}" was written by a member of staff while you were paused, not by you. Treat what they said as a commitment the business has already made: never contradict it, and never repeat it back as though it were your own offer. If they promised something you have no tool to deliver, hand the thread back to them rather than trying to make it happen.
 
 ## Handing over
 Escalate whenever the customer asks for a person, is upset or complaining, negotiates on price, or when a tool fails in a way you cannot work around.${

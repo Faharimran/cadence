@@ -13,7 +13,14 @@ import { redis } from "@/lib/redis";
 import { resolveCapabilities } from "@/lib/conversation/capabilities";
 import { getSnapshot, invalidateSnapshot } from "@/lib/conversation/snapshot";
 import { buildTools, type ToolContext } from "@/lib/conversation/tools";
-import { openThread, recordInbound } from "@/lib/conversation/thread";
+import {
+  openThread,
+  recordInbound,
+  recordOutbound,
+  loadTranscript,
+  COLLEAGUE_PREFIX,
+} from "@/lib/conversation/thread";
+import { systemPrompt } from "@/lib/conversation/agent";
 import { buildKnowledgeContext } from "@/lib/knowledge";
 import { localToInstant } from "@/lib/engine/time";
 
@@ -67,6 +74,102 @@ async function makeCtx(
     outcome: { escalated: false, escalationReasons: [], bookingIds: [], sources: [] },
   };
   return { ctx, tools: buildTools(ctx) };
+}
+
+/**
+ * What the agent is told about a colleague's replies.
+ *
+ * The bug this pins down: every outbound message used to become an `assistant`
+ * turn regardless of who wrote it, so a colleague's promise read back to the
+ * model as its own. It would then defend a commitment it never made, and had no
+ * way to tell "I offered this" from "a person offered this".
+ */
+async function proveHandoverTranscript(t: string) {
+  console.log("\nWhat the agent reads after a colleague replies");
+
+  const customer = await adminDb.customer.findFirstOrThrow({ where: { tenantId: t } });
+
+  // Cleared up front, not only afterwards. A run that fails partway leaves the
+  // probe thread behind, and the next run then appends to it and reads a
+  // transcript with two of everything in it.
+  await adminDb.conversationMessage.deleteMany({
+    where: { conversation: { externalThreadId: "__handover_probe" } },
+  });
+  await adminDb.conversation.deleteMany({ where: { externalThreadId: "__handover_probe" } });
+
+  const thread = await withTenant(t, (db) =>
+    openThread(db, {
+      tenantId: t,
+      channel: "web",
+      externalThreadId: "__handover_probe",
+      identity: { phone: customer.phone ?? "+000000000000" },
+    }),
+  );
+  const conversationId = thread.conversationId;
+
+  await withTenant(t, async (db) => {
+    await recordInbound(db, { tenantId: t, conversationId, body: "is parking free?" });
+    await recordOutbound(db, {
+      tenantId: t,
+      conversationId,
+      body: "Let me check that for you.",
+      author: "agent",
+    });
+    await recordOutbound(db, {
+      tenantId: t,
+      conversationId,
+      body: "Parking is free, and I'll waive your consultation fee.",
+      author: "human",
+    });
+    await recordInbound(db, { tenantId: t, conversationId, body: "great, thanks" });
+  });
+
+  const transcript = await withTenant(t, (db) =>
+    loadTranscript(db, { tenantId: t, conversationId }),
+  );
+
+  const outbound = transcript.find((m) => m.content.includes("waive your consultation fee"));
+  check("the colleague's message reaches the agent at all", Boolean(outbound));
+
+  // The mark sits immediately before the colleague's words. Asserted on the
+  // adjacency rather than on the start of the turn, because the agent's own
+  // reply and the colleague's are merged into a single assistant turn — which
+  // is exactly why an inline mark is needed instead of a per-turn one.
+  check(
+    "and is marked as theirs, not passed off as the agent's own words",
+    outbound?.content.includes(`${COLLEAGUE_PREFIX}Parking is free`) === true,
+    outbound?.content.replace(/\n/g, " ⏎ ").slice(0, 80),
+  );
+  check(
+    "while the agent's own sentence is not marked",
+    outbound?.content.includes(`${COLLEAGUE_PREFIX}Let me check`) === false,
+  );
+
+  // Two outbound messages in a row is the normal shape here — agent replies,
+  // colleague adds something — so the turns must still alternate.
+  const runs = transcript.filter((m, i) => i > 0 && transcript[i - 1].role === m.role);
+  check("consecutive same-role turns are merged", runs.length === 0, `${runs.length} run(s)`);
+  check(
+    "and merging kept both outbound messages",
+    transcript.some(
+      (m) => m.content.includes("Let me check that") && m.content.includes("waive your consultation fee"),
+    ),
+  );
+
+  // The prompt has to explain the marker, or it is noise the model invents a
+  // meaning for.
+  const prompt = systemPrompt(
+    { name: "Probe", timezone: "UTC", descriptor: null, toneNote: null, escalationTopics: [] },
+    ["catalog"],
+    { mode: "empty" },
+    { degraded: false },
+  )
+    .map((b) => b.text)
+    .join("\n");
+  check("the system prompt explains what the mark means", prompt.includes(COLLEAGUE_PREFIX.trim()));
+
+  await adminDb.conversationMessage.deleteMany({ where: { conversationId } });
+  await adminDb.conversation.delete({ where: { id: conversationId } });
 }
 
 async function main() {
@@ -290,6 +393,8 @@ async function main() {
   await adminDb.booking.deleteMany({ where: { tenantId: t } });
   await adminDb.conversationMessage.deleteMany({ where: { tenantId: t } });
   await adminDb.conversation.deleteMany({ where: { tenantId: t } });
+
+  await proveHandoverTranscript(t);
 
   console.log(`\n${passed} passed, ${failed} failed\n`);
   if (failed > 0) process.exitCode = 1;

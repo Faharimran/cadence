@@ -1,12 +1,21 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser, asTenant } from "@/lib/auth/guard";
 import { describeInstant } from "@/lib/engine/time";
 import { takeOver, handBack, replyAsHuman } from "../actions";
-import { Button, Pill, inputClass } from "../../ui";
+import { LiveBadge } from "../LiveBadge";
+import { Composer } from "./Composer";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * One conversation, as the right-hand pane.
+ *
+ * Three things share this space and their order is deliberate: who you are
+ * talking to and whether the assistant still has the thread; the transcript;
+ * and the composer pinned to the bottom. The takeover control sits in the
+ * header rather than beside the composer because it changes who owns the whole
+ * conversation, not who sends the next message.
+ */
 export default async function ConversationPage({
   params,
 }: {
@@ -20,7 +29,7 @@ export default async function ConversationPage({
       where: { id, tenantId: user.tenantId },
       include: {
         customer: true,
-        messages: { orderBy: { createdAt: "asc" }, take: 200 },
+        messages: { orderBy: { createdAt: "asc" }, take: 300 },
       },
     }),
   );
@@ -28,55 +37,90 @@ export default async function ConversationPage({
   if (!conversation) notFound();
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <Link
-          href="/admin/conversations"
-          className="font-mono text-[11px] text-ink-3 underline underline-offset-2"
-        >
-          ← all conversations
-        </Link>
+    <div className="flex h-full min-h-0 flex-col">
+      {/* ── Who, and who owns the thread ──────────────────────────── */}
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule px-5 py-3">
+        <span className="font-display text-[15px] font-semibold tracking-tight">
+          {conversation.customer.name ?? conversation.customer.phone ?? "Unknown"}
+        </span>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-mono text-xl font-semibold tracking-tight">
-            {conversation.customer.name ?? conversation.customer.phone ?? "Unknown"}
-          </h1>
-          <Pill>{conversation.channel}</Pill>
-          {conversation.botPaused ? (
-            <Pill tone="warn">you have this thread</Pill>
-          ) : (
-            <Pill tone="ok">assistant is handling it</Pill>
-          )}
-          {conversation.customer.optedOut && <Pill tone="bad">opted out of contact</Pill>}
+        <LiveBadge lastInboundAt={conversation.lastInboundAt?.toISOString() ?? null} />
+
+        <span className="font-mono text-[11px] text-ink-3">
+          {conversation.channel}
+          {conversation.customer.phone ? ` · ${conversation.customer.phone}` : ""}
+        </span>
+
+        <div className="ml-auto flex items-center gap-3">
+          <span
+            className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+            style={
+              conversation.botPaused
+                ? { color: "var(--warn)", background: "color-mix(in srgb, var(--warn) 14%, transparent)" }
+                : { color: "var(--ok)", background: "color-mix(in srgb, var(--ok) 14%, transparent)" }
+            }
+          >
+            {conversation.botPaused ? "you have this thread" : "assistant is replying"}
+          </span>
+
+          <form action={conversation.botPaused ? handBack : takeOver}>
+            <input type="hidden" name="id" value={conversation.id} />
+            <button
+              type="submit"
+              className={`rounded-full px-4 py-1.5 text-[12px] font-semibold transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                conversation.botPaused
+                  ? "border border-rule bg-surface text-ink"
+                  : "bg-accent text-white"
+              }`}
+            >
+              {conversation.botPaused ? "Hand back to the assistant" : "Take over"}
+            </button>
+          </form>
         </div>
+      </header>
 
-        <form action={conversation.botPaused ? handBack : takeOver}>
-          <input type="hidden" name="id" value={conversation.id} />
-          <Button type="submit" variant="quiet">
-            {conversation.botPaused
-              ? "hand back to the assistant"
-              : "take over — the assistant will stop replying"}
-          </Button>
-        </form>
-      </div>
+      {conversation.customer.optedOut && (
+        <p
+          className="border-b border-rule px-5 py-2 text-[12px]"
+          style={{ color: "var(--bad)", background: "color-mix(in srgb, var(--bad) 8%, transparent)" }}
+        >
+          This customer has opted out. Nothing can be sent to them.
+        </p>
+      )}
 
-      <ol className="flex flex-col gap-3">
+      {/* ── Transcript ────────────────────────────────────────────── */}
+      <ol className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto bg-paper px-5 py-4">
+        {conversation.messages.length === 0 && (
+          <li className="text-sm text-ink-3">Nothing said yet.</li>
+        )}
+
         {conversation.messages.map((m) => {
           const outbound = m.direction === "outbound";
+          const byHuman = m.author === "human";
+
           return (
             <li
               key={m.id}
               className={`flex flex-col gap-1 ${outbound ? "items-end" : "items-start"}`}
             >
               <div
-                className={`max-w-[70ch] whitespace-pre-wrap rounded-lg border px-3.5 py-2.5 text-sm ${
-                  outbound ? "border-accent/30 bg-surface-2" : "border-rule bg-surface"
+                className={`max-w-[68ch] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm ${
+                  outbound ? "rounded-br-sm text-white" : "rounded-bl-sm border border-rule bg-surface"
                 }`}
+                // A colleague's message is visually distinct from the
+                // assistant's, because "did a person say this?" is the first
+                // question anyone reading back has.
+                style={
+                  outbound
+                    ? { background: byHuman ? "var(--ok)" : "var(--accent)" }
+                    : undefined
+                }
               >
                 {m.body}
               </div>
+
               <span className="font-mono text-[10px] text-ink-3">
-                {m.author}
+                {byHuman ? "a colleague" : m.author}
                 {" · "}
                 {describeInstant(m.createdAt, user.tenantTimezone)}
                 {m.status === "failed" && (
@@ -87,32 +131,20 @@ export default async function ConversationPage({
                 {m.snapshotAt && m.author === "agent" && (
                   <span> · data from {describeInstant(m.snapshotAt, user.tenantTimezone)}</span>
                 )}
+                {m.sources.length > 0 && <span> · read {m.sources.join(", ")}</span>}
               </span>
             </li>
           );
         })}
       </ol>
 
-      {conversation.customer.optedOut ? (
-        <p className="text-sm" style={{ color: "var(--bad)" }}>
-          This customer has opted out. Nothing can be sent to them.
-        </p>
-      ) : (
-        <form action={replyAsHuman} className="flex flex-col gap-2">
-          <input type="hidden" name="id" value={conversation.id} />
-          <textarea
-            name="body"
-            required
-            rows={3}
-            className={inputClass}
-            placeholder="Reply as yourself…"
-          />
-          <p className="text-[11px] text-ink-3">
-            Sending takes the thread over automatically — two voices answering one customer is
-            worse than a slow reply.
-          </p>
-          <Button type="submit">Send</Button>
-        </form>
+      {/* ── Composer ──────────────────────────────────────────────── */}
+      {!conversation.customer.optedOut && (
+        <Composer
+          conversationId={conversation.id}
+          action={replyAsHuman}
+          botPaused={conversation.botPaused}
+        />
       )}
     </div>
   );

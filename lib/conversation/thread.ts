@@ -137,11 +137,31 @@ export async function recordOutbound(
 }
 
 /**
- * The whole transcript, oldest first, as alternating turns for the model.
+ * Marks a turn that a member of staff sent, not the assistant.
  *
- * Human replies are folded in as assistant turns rather than dropped: when a
- * colleague takes over and later hands back, the agent must see what was
- * promised in its absence, or it will contradict its own business.
+ * Exported because the system prompt has to explain what it means, and the two
+ * must not drift apart.
+ */
+export const COLLEAGUE_PREFIX = "[sent by a colleague, not by you] ";
+
+/**
+ * The whole transcript, oldest first, as turns for the model.
+ *
+ * Human replies are folded in rather than dropped: when a colleague takes over
+ * and later hands back, the agent must see what was promised in its absence or
+ * it will contradict its own business.
+ *
+ * But they are folded in ATTRIBUTED. Every outbound message used to become an
+ * `assistant` turn regardless of who wrote it, which told the model it had said
+ * things a person said — so a colleague waiving a fee read back as the
+ * assistant's own promise, and it would defend it. The prefix is what lets the
+ * model tell "I offered this" from "my colleague offered this, honour it but
+ * don't invent more of it".
+ *
+ * Consecutive same-role turns are merged. Two outbound messages in a row are
+ * routine here — the agent replies, then a colleague adds something — and
+ * merging keeps the sequence strictly alternating rather than relying on the
+ * API to tolerate runs.
  */
 export async function loadTranscript(
   db: TenantDb,
@@ -149,17 +169,33 @@ export async function loadTranscript(
 ) {
   const rows = await db.conversationMessage.findMany({
     where: { tenantId: args.tenantId, conversationId: args.conversationId },
-    orderBy: { createdAt: "desc" },
+    // `id` breaks the tie. Timestamps are millisecond precision and an agent
+    // reply followed immediately by a colleague's can land in the same one,
+    // which left the order of two consecutive turns undefined — the model would
+    // occasionally read them backwards. cuid ids are time-ordered, so this is a
+    // stable second key rather than an arbitrary one.
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: args.limit ?? 40,
+    select: { direction: true, author: true, body: true },
   });
 
-  return rows
+  const turns = rows
     .reverse()
+    .filter((m) => m.body.trim().length > 0)
     .map((m) => ({
       role: m.direction === "inbound" ? ("user" as const) : ("assistant" as const),
-      content: m.body,
-    }))
-    .filter((m) => m.content.trim().length > 0);
+      content: m.direction === "outbound" && m.author === "human"
+        ? `${COLLEAGUE_PREFIX}${m.body}`
+        : m.body,
+    }));
+
+  const merged: typeof turns = [];
+  for (const turn of turns) {
+    const previous = merged[merged.length - 1];
+    if (previous?.role === turn.role) previous.content += `\n\n${turn.content}`;
+    else merged.push(turn);
+  }
+  return merged;
 }
 
 /** Stops the agent replying on this thread. */
