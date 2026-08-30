@@ -202,9 +202,9 @@ async function searchFullText(
     FROM "KnowledgeDoc"
     WHERE "tenantId" = ${tenantId}
       AND status = 'approved'
-      AND search @@ to_tsquery('english', ${query})
+      AND knowledge_tsv(title, body) @@ to_tsquery('english', ${query})
       ${tags?.length ? Prisma.sql`AND tags && ${tags}::text[]` : Prisma.empty}
-    ORDER BY ts_rank(search, to_tsquery('english', ${query})) DESC, title ASC
+    ORDER BY ts_rank(knowledge_tsv(title, body), to_tsquery('english', ${query})) DESC, title ASC
     LIMIT ${limit}
   `;
 

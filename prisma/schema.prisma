@@ -128,6 +128,42 @@ model User {
   @@index([tenantId, active])
 }
 
+/// Someone who runs cadence itself, rather than a business on it.
+///
+/// A separate table from `User`, not a flag on it, and the reason is structural:
+/// every `User` belongs to a tenant, and a platform operator belongs to none.
+/// Expressing "no tenant" as a nullable column would put a null check between
+/// every query and its tenant scope — the exact check that gets forgotten once.
+/// Two tables cannot be confused for one another.
+///
+/// Deliberately NOT in the row-level-security list in scripts/applyRls.ts. It
+/// carries no tenantId, so a tenant policy has nothing to key on; it is instead
+/// protected by never being reachable from a tenant session (see
+/// lib/platform/session.ts, which signs with a different HMAC domain).
+model PlatformUser {
+  id String @id @default(cuid())
+
+  email        String       @unique
+  name         String?
+  /// scrypt, same as User. Shares lib/auth/password.ts.
+  passwordHash String
+  role         PlatformRole @default(support)
+  active       Boolean      @default(true)
+
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([active])
+}
+
+enum PlatformRole {
+  /// Read-only. Sees health and volume, changes nothing.
+  support
+  /// May suspend and reactivate a tenant. Every such act is audited.
+  admin
+}
+
 /// Closed set — authorization branches on these, so adding one is a code change.
 enum UserRole {
   /// Everything, including users, billing and channel credentials.
@@ -876,6 +912,14 @@ model KnowledgeDoc {
   authorId     String?
   approvedById String?
   approvedAt   DateTime? @db.Timestamptz(3)
+
+  // Full-text search adds no column here on purpose. It is a GIN index over the
+  // expression `knowledge_tsv(title, body)` — see the migration. A stored
+  // generated column was tried first and had to be abandoned: Prisma cannot
+  // express GENERATED, so it read the column as drift, offered to reset the
+  // database on every `migrate dev`, and then emitted DDL Postgres rejects.
+  // An expression index is invisible to Prisma for the same reason the
+  // exclusion constraint on BookingResource is, and costs nothing in speed.
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

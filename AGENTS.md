@@ -66,6 +66,15 @@ async, and route handlers are uncached by default.
    Redis under a one-hour TTL between the request and the worker, and only the extracted
    text is kept.
 
+9. **The operator console shows counts, never a customer.** `/platform` is the one
+   surface that reads across tenants, on the owner connection, which RLS does not
+   constrain — so `lib/platform/metrics.ts` may select aggregates, staff emails and
+   hostnames, and must never select `Customer.name`, `Customer.phone`,
+   `ConversationMessage.body`, or any stored secret. Operators are a separate table with
+   their own cookie and their own HMAC domain: a tenant session cannot open the console
+   and an operator session cannot open a tenant admin. `scripts/provePlatform.ts` asserts
+   both, and requires each page to return 200 before trusting a negative assertion.
+
 ## What cadence is not
 
 It books **appointments** — something a customer occupies for a duration. Retail and food
@@ -79,6 +88,7 @@ bridges that gap. Say so rather than stretching the model to fit.
 | `lib/engine/` | Availability, holds, bookings, promotions. The sellable core. |
 | `lib/conversation/` | Agent loop, tool assembly, snapshots. |
 | `lib/knowledge/` | Retrieval, PDF extraction, chunking, ingestion. |
+| `lib/platform/` | Operator console: its own session, guard and metrics. |
 | `lib/channels/` | WhatsApp, web widget, etc. Transport only. |
 | `lib/connectors/` | Per-CRM adapters implementing the canonical interface. |
 | `lib/api/` | Auth, tenant context, idempotency, error shapes. |

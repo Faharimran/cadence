@@ -151,39 +151,33 @@ async function applyOverlapConstraint() {
  * happens to contain the word "finance".
  */
 async function applyKnowledgeSearch() {
-  const [{ exists }] = await prisma.$queryRawUnsafe<{ exists: boolean }[]>(`
-    SELECT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_name = 'KnowledgeDoc' AND column_name = 'search'
-    ) AS exists
+  // Both statements are idempotent, and both also live in the migration that
+  // introduced them. Kept here for the same reason the exclusion constraint is:
+  // this script is the one place that states every database-level guarantee, and
+  // re-running it after a deploy must be enough to be sure they all hold.
+  //
+  // A function plus an expression index rather than a stored generated column.
+  // The generated column was tried and abandoned — Prisma cannot express
+  // GENERATED, so it read the column as drift and offered to reset the database
+  // on every `migrate dev`. Nothing here is visible to Prisma.
+  await prisma.$executeRawUnsafe(`
+    CREATE OR REPLACE FUNCTION knowledge_tsv(title text, body text)
+      RETURNS tsvector
+      LANGUAGE sql
+      IMMUTABLE
+      PARALLEL SAFE
+    AS $$
+      SELECT setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+             setweight(to_tsvector('english', coalesce(body, '')), 'B')
+    $$
   `);
 
-  if (!exists) {
-    // The two-argument form of to_tsvector with a literal config is IMMUTABLE,
-    // which is what makes it legal in a generated column. The single-argument
-    // form depends on a session setting and is rejected.
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE "KnowledgeDoc" ADD COLUMN search tsvector
-        GENERATED ALWAYS AS (
-          setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
-          setweight(to_tsvector('english', coalesce(body, '')), 'B')
-        ) STORED
-    `);
-    console.log("  ✓ KnowledgeDoc.search (generated tsvector)");
-  } else {
-    console.log("  · knowledge search column already present");
-  }
-
   await prisma.$executeRawUnsafe(
-    `CREATE INDEX IF NOT EXISTS knowledge_doc_search ON "KnowledgeDoc" USING GIN (search)`,
+    `CREATE INDEX IF NOT EXISTS knowledge_doc_search
+       ON "KnowledgeDoc" USING GIN (knowledge_tsv(title, body))`,
   );
 
-  // The app role needs to read the new column like any other.
-  await prisma.$executeRawUnsafe(
-    `GRANT SELECT ON "KnowledgeDoc" TO ${APP_ROLE}`,
-  ).catch(() => {
-    /* role may not exist on a fresh clone; RLS setup reports that separately */
-  });
+  console.log("  ✓ knowledge full-text index");
 }
 
 /** Proves the two guarantees hold, rather than assuming the DDL above was enough. */
