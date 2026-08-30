@@ -116,7 +116,7 @@ export default async function KnowledgePage() {
               <Row key={d.id}>
                 <div className="flex w-full flex-col gap-2">
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <span className="font-mono text-sm font-semibold">{d.title}</span>
+                    <span className="font-display text-[15px] font-semibold tracking-tight">{d.title}</span>
                     <Pill tone="warn">draft</Pill>
                     {d.source && (
                       <span className="font-mono text-[11px] text-ink-3">
@@ -161,7 +161,7 @@ export default async function KnowledgePage() {
                 <Row key={d.id}>
                   <div className="flex w-full flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                      <span className="font-mono text-sm font-semibold">{d.title}</span>
+                      <span className="font-display text-[15px] font-semibold tracking-tight">{d.title}</span>
                       <Pill tone="ok">live · v{d.version}</Pill>
                       {d.tags.map((t) => (
                         <Pill key={t}>{t}</Pill>

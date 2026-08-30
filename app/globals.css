@@ -21,8 +21,39 @@
   --bad: #b4453c;
 }
 
+/* ───────────────────────────────────────────────────────────────────────
+   Shell.
+
+   The signed-in surfaces sit under a coloured band with the working area as a
+   white sheet lifted into it. The colour is what tells you which door you came
+   through, so the two shells are deliberately far apart: the tenant admin is
+   blue and friendly, the operator console is near-black. Someone who can open
+   both should never have to read the header to know where they are.
+
+   --lime is inherited from the marketing tokens and stays non-semantic here
+   too: it marks the current nav tab and nothing else. State is --ok/--warn/--bad.
+   ─────────────────────────────────────────────────────────────────────── */
+:root {
+  --shell: #2e7cf6;
+  --shell-2: #1f63d4;
+  --on-shell: #ffffff;
+  --on-shell-2: #cfe0fb;
+  --shell-hair: rgba(255, 255, 255, 0.18);
+  --console: #141b26;
+  --console-2: #1e2836;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
+    /* Dimmed rather than re-hued: the shell must stay recognisably itself, and
+       a full-strength blue band under a dark UI is a headache by mid-afternoon. */
+    --shell: #1d4f9e;
+    --shell-2: #163c78;
+    --on-shell-2: #a6c4ee;
+    --shell-hair: rgba(255, 255, 255, 0.12);
+    --console: #0c111a;
+    --console-2: #161e2a;
+
     --paper: #0e141b;
     --surface: #151e28;
     --surface-2: #1d2833;
@@ -95,6 +126,12 @@
   --color-m-ink: var(--m-ink);
   --color-m-ink-2: var(--m-ink-2);
   --color-m-ink-3: var(--m-ink-3);
+  --color-shell: var(--shell);
+  --color-shell-2: var(--shell-2);
+  --color-on-shell: var(--on-shell);
+  --color-on-shell-2: var(--on-shell-2);
+  --color-console: var(--console);
+  --color-console-2: var(--console-2);
   --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
   --color-paper: var(--paper);
   --color-surface: var(--surface);
