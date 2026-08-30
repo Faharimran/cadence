@@ -12,7 +12,7 @@
     "worker": "tsx workers/index.ts",
     "worker:dev": "dotenv -e .env.local -- tsx watch workers/index.ts",
     "db:generate": "prisma generate",
-    "db:push": "dotenv -e .env.local -- prisma db push   # local iteration only — deploys use db:migrate:deploy",
+    "db:push": "dotenv -e .env.local -- prisma db push   # local iteration only \u2014 deploys use db:migrate:deploy",
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev",
     "db:migrate:deploy": "dotenv -e .env.local -- prisma migrate deploy",
     "db:studio": "dotenv -e .env.local -- prisma studio",
@@ -31,7 +31,8 @@
     "prove:platform": "dotenv -e .env.local -- tsx scripts/provePlatform.ts",
     "db:encrypt": "dotenv -e .env.local -- tsx scripts/encryptSecrets.ts",
     "check": "npm run prove:engine && npm run prove:conversation && npm run prove:delivery && npm run prove:webhook && npm run prove:auth && npm run prove:knowledge && npm run prove:platform",
-    "seed:cara": "dotenv -e .env.local -- tsx scripts/seedCaraTenant.ts"
+    "seed:cara": "dotenv -e .env.local -- tsx scripts/seedCaraTenant.ts",
+    "live:whatsapp": "dotenv -e .env.local -- tsx scripts/liveWhatsApp.ts"
   },
   "engines": {
     "node": ">=20.9"
