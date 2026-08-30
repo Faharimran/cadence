@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { requireUser, asTenant, can } from "@/lib/auth/guard";
-import { LocationForm, ExceptionTypeForm, WhatsAppForm, VoiceForm } from "./forms";
+import { LocationForm, ExceptionTypeForm, VoiceForm } from "./forms";
 import { Empty, PageHeader, Pill, Row, Section } from "../ui";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export default async function SettingsPage() {
     return { locations, types, channel, users, tenant };
   });
 
-  const isOwner = can(user, "owner");
+  // The owner-only check moved with the WhatsApp form to its own page.
   const isManager = can(user, "manager");
 
   return (
@@ -116,22 +117,36 @@ export default async function SettingsPage() {
       </Section>
 
       {/* ── WhatsApp ──────────────────────────────────────────────── */}
+      {/* The form lives on its own page alongside the instructions. Connecting
+          WhatsApp means copying three secrets out of Meta's developer console,
+          and a bare set of fields with no explanation is where non-technical
+          people give up — so the fields and the steps are never separated. */}
       <Section title="WhatsApp" boxed>
-        {isOwner ? (
-          <WhatsAppForm
-            existing={
-              channel
-                ? {
-                    externalAccountId: channel.externalAccountId,
-                    displayNumber: channel.displayNumber,
-                    hasToken: Boolean(channel.accessToken),
-                  }
-                : null
-            }
-          />
-        ) : (
-          <Empty>Only the owner can change channel credentials.</Empty>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          {channel?.accessToken && channel.active ? (
+            <Pill tone="ok">connected</Pill>
+          ) : channel ? (
+            <Pill tone="warn">started, not finished</Pill>
+          ) : (
+            <Pill tone="warn">not connected</Pill>
+          )}
+          {channel?.displayNumber && (
+            <span className="font-mono text-xs text-ink-2">{channel.displayNumber}</span>
+          )}
+        </div>
+
+        <p className="mt-3 max-w-[66ch] text-sm text-ink-2">
+          {channel?.accessToken
+            ? "Customers can message you and the assistant will answer."
+            : "Until this is connected, everything else works — customers just cannot message you."}
+        </p>
+
+        <Link
+          href="/admin/settings/whatsapp"
+          className="mt-4 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {channel ? "Open the setup guide" : "Connect WhatsApp — step by step"}
+        </Link>
       </Section>
 
       {/* ── People ────────────────────────────────────────────────── */}
