@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { randomBytes } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { requireUser, asTenant, can } from "@/lib/auth/guard";
 import { env } from "@/lib/env";
 import { WhatsAppForm } from "../forms";
@@ -38,9 +38,21 @@ export default async function WhatsAppGuidePage() {
   const callbackUrl = `${base}/api/webhooks/whatsapp`;
   const looksLocal = /localhost|127\.0\.0\.1|\.local(:|$)/i.test(base);
 
-  // A fresh suggestion on every visit. Nothing is stored until they save, so
-  // reloading simply offers a different one.
-  const suggestedToken = `cadence-${randomBytes(9).toString("hex")}`;
+  // Derived from the tenant, NOT random per visit.
+  //
+  // The first version generated a fresh one on every load, which is a trap: you
+  // copy it into Meta, come back, the page has re-rendered with a different one,
+  // you save that — and verification fails with nothing to indicate why. The
+  // suggestion has to survive a reload because the flow requires leaving the
+  // page and returning.
+  //
+  // HMAC over the tenant id rather than a stored column: stable, unique per
+  // business, and unguessable without CADENCE_SECRET. It is only a suggestion —
+  // whatever they actually save is what counts.
+  const suggestedToken = `cadence-${createHmac("sha256", env.CADENCE_SECRET)
+    .update(`whatsapp-verify:${user.tenantId}`)
+    .digest("hex")
+    .slice(0, 18)}`;
 
   const connected = Boolean(channel?.accessToken && channel.active);
   const isOwner = can(user, "owner");
@@ -127,9 +139,15 @@ export default async function WhatsAppGuidePage() {
           <CopyBox label="Verify token — we made one up for you" value={suggestedToken} />
         </div>
         <p className="mt-3 max-w-[72ch] text-[12px] text-ink-3">
-          The verify token is just a password that proves Meta is talking to the right place. It
-          does not matter what it says, only that the same text goes in both places. If you already
-          saved a different one, keep using that.
+          The verify token is a password you make up. Meta does not care what it says — it exists so
+          cadence can tell that a webhook call is really yours. Put the <em>same</em> text in both
+          places and it will match. It is used once, during setup; after that, messages are checked
+          with the app secret instead.
+        </p>
+        <p className="mt-2 max-w-[72ch] text-[12px] text-ink-3">
+          This suggestion stays the same every time you open this page, so you can leave and come
+          back without it changing under you. If you have already saved a different one, keep using
+          that.
         </p>
       </Section>
 
