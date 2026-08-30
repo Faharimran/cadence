@@ -1,4 +1,6 @@
+import { Prisma } from "@prisma/client";
 import type { TenantDb } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 
 /**
  * Reading what the business has written down.
@@ -87,20 +89,55 @@ export async function buildKnowledgeContext(
 }
 
 /**
- * Keyword search over the approved corpus.
+ * Search over the approved corpus.
  *
- * Scored in JavaScript over a plain fetch rather than in Postgres. That is a
- * deliberate trade for this stage: it is exact, it is trivially testable, and it
- * needs no tsvector column to drift out of sync with the text. It reads every
- * approved doc, which is fine into the hundreds and wrong in the thousands — at
- * which point this function is where embeddings go, and nothing that calls it
- * has to change.
+ * Postgres full-text, for two things a hand-rolled scorer got wrong on a real
+ * document. Counting distinct term hits equally, an article titled "What ways
+ * can I pay for a car?" lost the question "do you do monthly payments?" to one
+ * that merely happened to contain the word "finance" in its title.
+ *
+ *  · **Ranking.** `ts_rank` weighs how many query terms a document matches and
+ *    where they matched, so a body containing both "monthly" and "payments"
+ *    beats a title containing one unrelated word. This is what fixed the case
+ *    above.
+ *
+ *  · **Stemming.** `financing`/`finance` and `booking`/`booked` reduce to one
+ *    token, so a customer's tense and number stop mattering. Note the limit:
+ *    Porter stems `pay` to `pay` and `payments` to `payment`, which are NOT the
+ *    same token. Stemming handles inflections, not vocabulary — a question
+ *    sharing no word stem with the article still misses, and that is the gap
+ *    embeddings would close.
+ *
+ * Terms are OR-ed and ranked, not AND-ed. A customer's question always carries
+ * words that appear in no article; requiring all of them matches nothing, and
+ * ranking is what sorts out which hit is best.
+ *
+ * When a question arrives phrased with none of the article's vocabulary at all,
+ * keyword matching runs out and this is where embeddings go. Nothing that calls
+ * this has to change when they do.
  */
 export async function searchKnowledge(
   db: TenantDb,
   tenantId: string,
   args: { query: string; tags?: string[]; limit?: number },
 ): Promise<KnowledgeEntry[]> {
+  const limit = args.limit ?? 3;
+  const terms = tokenise(args.query);
+
+  if (terms.length > 0) {
+    try {
+      return await searchFullText(db, tenantId, terms, args.tags, limit);
+    } catch (err) {
+      // The generated column is created by scripts/applyRls.ts rather than by a
+      // Prisma migration, so a database that has been migrated but not had that
+      // script run will not have it. Degrading to the scorer below keeps the
+      // assistant answering rather than failing a customer's question outright.
+      logger.warn("knowledge: full-text search unavailable, falling back", {
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   const docs = await db.knowledgeDoc.findMany({
     where: {
       tenantId,
@@ -110,8 +147,7 @@ export async function searchKnowledge(
     select: { id: true, title: true, body: true, tags: true, version: true },
   });
 
-  const terms = tokenise(args.query);
-  if (terms.length === 0) return docs.slice(0, args.limit ?? 3).map((d) => ({ ...d, body: clamp(d.body) }));
+  if (terms.length === 0) return docs.slice(0, limit).map((d) => ({ ...d, body: clamp(d.body) }));
 
   const scored = docs
     .map((doc) => {
@@ -137,9 +173,52 @@ export async function searchKnowledge(
 }
 
 /**
+ * The indexed path.
+ *
+ * Parameterised throughout. The terms come from a customer's message, which is
+ * hostile input by default — `to_tsquery` has its own operator syntax (`&`, `|`,
+ * `!`, `<->`) and interpolating a message containing any of them is at best a
+ * syntax error and at worst a way to steer the query. Terms are already
+ * stripped to letters and digits by `tokenise`, and passed as a value on top of
+ * that.
+ *
+ * `status = 'approved'` is repeated here rather than relied upon from anywhere
+ * else. This is the one query in the system that reads knowledge for a
+ * customer-facing answer, so the gate is restated where it is enforced.
+ */
+async function searchFullText(
+  db: TenantDb,
+  tenantId: string,
+  terms: string[],
+  tags: string[] | undefined,
+  limit: number,
+): Promise<KnowledgeEntry[]> {
+  const query = terms.join(" | ");
+
+  const rows = await db.$queryRaw<
+    { id: string; title: string; body: string; tags: string[]; version: number }[]
+  >`
+    SELECT id, title, body, tags, version
+    FROM "KnowledgeDoc"
+    WHERE "tenantId" = ${tenantId}
+      AND status = 'approved'
+      AND search @@ to_tsquery('english', ${query})
+      ${tags?.length ? Prisma.sql`AND tags && ${tags}::text[]` : Prisma.empty}
+    ORDER BY ts_rank(search, to_tsquery('english', ${query})) DESC, title ASC
+    LIMIT ${limit}
+  `;
+
+  return rows.map((r) => ({ ...r, body: clamp(r.body) }));
+}
+
+/**
  * Stop words are dropped so that "do you do walk ins" does not match every
  * document containing the word "do". Kept short on purpose — an aggressive list
  * throws away terms that carry meaning in a short question.
+ *
+ * Postgres does its own stop-word removal too, but this list runs first and also
+ * guards `to_tsquery`: a query that reduces to nothing but stop words would
+ * otherwise produce an empty tsquery and an error rather than no results.
  */
 const STOP = new Set([
   "a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "does", "for", "from", "have",

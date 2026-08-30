@@ -13,6 +13,7 @@ import { logger } from "@/lib/logger";
 
 export const AGENT_TURN_QUEUE = "agent-turn";
 export const HOLD_EXPIRY_QUEUE = "hold-expiry";
+export const INGEST_QUEUE = "knowledge-ingest";
 
 /**
  * How long to wait after a message before replying.
@@ -33,6 +34,7 @@ export function createQueueConnection(): Redis {
 
 let connection: Redis | null = null;
 let agentTurnQueue: Queue | null = null;
+let knowledgeIngestQueue: Queue | null = null;
 
 function queueConnection(): Redis {
   connection ??= createQueueConnection();
@@ -96,9 +98,44 @@ export async function scheduleAgentTurn(job: AgentTurnJob): Promise<void> {
   await queue.add("reply", job, { jobId, delay: DEBOUNCE_MS });
 }
 
+/**
+ * Reading an uploaded document.
+ *
+ * Queued rather than done in the request because extraction plus one titling
+ * call per batch of passages takes tens of seconds on a real brochure — well
+ * past any HTTP timeout, and not something a receptionist should sit watching a
+ * spinner for. The upload returns as soon as the file is banked; the review
+ * screen shows progress.
+ *
+ * One attempt, deliberately. A retry would re-run the titling calls and bill for
+ * them again, and a half-ingested source is visible and re-uploadable, so the
+ * failure is recoverable by hand rather than silently expensive.
+ */
+export function knowledgeIngests(): Queue {
+  knowledgeIngestQueue ??= new Queue(INGEST_QUEUE, {
+    connection: queueConnection(),
+    defaultJobOptions: {
+      attempts: 1,
+      removeOnComplete: { age: 3_600, count: 100 },
+      removeOnFail: { age: 604_800 },
+    },
+  });
+  return knowledgeIngestQueue;
+}
+
+export type KnowledgeIngestJob = { tenantId: string; sourceId: string };
+
+export async function scheduleIngest(job: KnowledgeIngestJob): Promise<void> {
+  // The source id is the job id, so a double-submitted upload form cannot start
+  // two extractions over the same rows.
+  await knowledgeIngests().add("ingest", job, { jobId: job.sourceId });
+}
+
 export async function closeQueues(): Promise<void> {
   await agentTurnQueue?.close();
+  await knowledgeIngestQueue?.close();
   connection?.disconnect();
   agentTurnQueue = null;
+  knowledgeIngestQueue = null;
   connection = null;
 }

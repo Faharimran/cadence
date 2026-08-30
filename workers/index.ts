@@ -5,10 +5,13 @@ import { logger } from "@/lib/logger";
 import { decrypt } from "@/lib/crypto";
 import {
   AGENT_TURN_QUEUE,
+  INGEST_QUEUE,
   createQueueConnection,
   closeQueues,
   type AgentTurnJob,
+  type KnowledgeIngestJob,
 } from "@/lib/queue";
+import { ingestSource, takeUpload } from "@/lib/knowledge/ingest";
 import { runAgentTurn, isAgentConfigured } from "@/lib/conversation/agent";
 import { expireStaleHolds } from "@/lib/engine/booking";
 import { sendText, splitForDelivery } from "@/lib/channels/whatsapp";
@@ -84,6 +87,65 @@ agentWorker.on("completed", (job, result) => {
 });
 agentWorker.on("failed", (job, err) => {
   logger.error("agent turn failed", { job: job?.id, err: err.message });
+});
+
+/**
+ * Reading uploaded documents.
+ *
+ * Separate from the agent worker because the two fail differently and should not
+ * share a retry policy: a turn that fails leaves a customer waiting and is worth
+ * retrying; an ingestion that fails leaves a row a person can see and re-upload,
+ * and retrying it silently re-bills the titling calls.
+ */
+const ingestWorker = new Worker<KnowledgeIngestJob>(
+  INGEST_QUEUE,
+  async (job) => {
+    const { tenantId, sourceId } = job.data;
+
+    const bytes = await takeUpload(sourceId);
+    if (!bytes) {
+      // The stash expired, or this is a retry after the bytes were consumed.
+      // Recorded on the row rather than thrown, so the reviewer sees a sentence
+      // they can act on instead of an empty source stuck at "extracting".
+      const note = "The upload expired before it could be read. Please upload the file again.";
+      await withTenant(tenantId, (db) =>
+        db.knowledgeSource.update({
+          where: { id: sourceId },
+          data: { status: "failed", failureNote: note },
+        }),
+      );
+      return { skipped: "upload expired" };
+    }
+
+    return withTenant(
+      tenantId,
+      (db) => ingestSource(db, { tenantId, sourceId, bytes }),
+      // Extraction plus one titling call per batch of passages. A long brochure
+      // legitimately takes minutes.
+      { timeoutMs: 600_000 },
+    );
+  },
+  { connection, concurrency: 2 },
+);
+
+ingestWorker.on("completed", (job, result) => {
+  logger.info("knowledge ingest done", { job: job.id, ...(result as object) });
+});
+ingestWorker.on("failed", async (job, err) => {
+  logger.error("knowledge ingest failed", { job: job?.id, err: err.message });
+  // A thrown error would otherwise leave the source sitting at "extracting"
+  // forever, which reads as "still working" to whoever uploaded it.
+  if (job?.data) {
+    await withTenant(job.data.tenantId, (db) =>
+      db.knowledgeSource.update({
+        where: { id: job.data.sourceId },
+        data: {
+          status: "failed",
+          failureNote: "Something went wrong reading that file. Try uploading it again.",
+        },
+      }),
+    ).catch(() => {});
+  }
 });
 
 /**
@@ -187,7 +249,7 @@ void sweepExpiredHolds();
 void drainWebhooks();
 
 logger.info("worker started", {
-  queues: [AGENT_TURN_QUEUE, "webhook-outbox"],
+  queues: [AGENT_TURN_QUEUE, INGEST_QUEUE, "webhook-outbox"],
   agent: isAgentConfigured() ? "configured" : "NO ANTHROPIC_API_KEY — turns will fail",
 });
 
@@ -198,6 +260,7 @@ async function shutdown(signal: string) {
   // Closing the worker waits for in-flight jobs, so a turn mid-conversation
   // finishes and the customer is not left hanging.
   await agentWorker.close();
+  await ingestWorker.close();
   await closeQueues();
   await adminDb.$disconnect();
   redis.disconnect();

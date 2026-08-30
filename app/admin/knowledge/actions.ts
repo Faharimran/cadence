@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser, asTenant } from "@/lib/auth/guard";
 import { logger } from "@/lib/logger";
+import { checksumOf, stashUpload } from "@/lib/knowledge/ingest";
+import { scheduleIngest } from "@/lib/queue";
 
 /**
  * Writing down what the business knows.
@@ -179,6 +181,148 @@ export async function archiveDoc(formData: FormData): Promise<void> {
       where: { id, tenantId: user.tenantId },
       data: { status: "archived" },
     });
+    revalidatePath("/admin/knowledge");
+  });
+}
+
+/**
+ * Uploading a document.
+ *
+ * The request does the minimum that must be transactional — reject a duplicate,
+ * bank a row, stash the bytes, queue the work — and returns. Extraction and
+ * titling happen in the worker, because a real brochure takes tens of seconds
+ * and nobody should be watching a spinner for it.
+ */
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+
+export async function uploadSource(
+  _previous: KnowledgeFormState,
+  formData: FormData,
+): Promise<KnowledgeFormState> {
+  const user = await requireUser();
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Choose a file first." };
+
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return { error: `That file is ${(file.size / 1024 / 1024).toFixed(1)} MB — 15 MB is the limit.` };
+  }
+  // Checked by extension as well as type, because browsers report the type
+  // inconsistently and a wrong answer here is a confusing failure much later.
+  if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+    return { error: "PDFs only for now. Word documents need exporting to PDF first." };
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const checksum = checksumOf(bytes);
+
+  const result = await asTenant(user, async (db) => {
+    const existing = await db.knowledgeSource.findFirst({
+      where: { tenantId: user.tenantId, checksum },
+      select: { id: true, filename: true, status: true },
+    });
+    if (existing) {
+      return {
+        error:
+          existing.status === "failed"
+            ? `That's the same file as "${existing.filename}", which couldn't be read. Delete it below before trying again.`
+            : `That file has already been uploaded as "${existing.filename}".`,
+      };
+    }
+
+    const source = await db.knowledgeSource.create({
+      data: {
+        tenantId: user.tenantId,
+        filename: file.name.slice(0, 200),
+        mimeType: file.type || "application/pdf",
+        byteSize: file.size,
+        checksum,
+        uploadedById: user.id,
+      },
+    });
+    return { sourceId: source.id };
+  });
+
+  if ("error" in result) return result;
+
+  await stashUpload(result.sourceId, bytes);
+  await scheduleIngest({ tenantId: user.tenantId, sourceId: result.sourceId });
+
+  revalidatePath("/admin/knowledge");
+  return { ok: "Reading it now. Refresh in a moment — everything it finds arrives as a draft for you to check." };
+}
+
+/**
+ * Removing a source removes the drafts that came out of it, but never anything
+ * already approved — someone signed those off, and they are live answers now
+ * regardless of where the text originally came from.
+ */
+export async function deleteSource(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  await asTenant(user, async (db) => {
+    const source = await db.knowledgeSource.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: { id: true },
+    });
+    if (!source) return;
+
+    await db.knowledgeDoc.deleteMany({
+      where: { tenantId: user.tenantId, sourceId: id, status: "draft" },
+    });
+    await db.knowledgeSource.delete({ where: { id } });
+    revalidatePath("/admin/knowledge");
+  });
+}
+
+/** Approves every remaining draft from one document in a single action. */
+export async function approveAllFromSource(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  await asTenant(user, async (db) => {
+    const drafts = await db.knowledgeDoc.findMany({
+      where: { tenantId: user.tenantId, sourceId: id, status: "draft" },
+    });
+
+    for (const doc of drafts) {
+      const version = doc.approvedAt ? doc.version + 1 : doc.version;
+      await db.knowledgeDoc.update({
+        where: { id: doc.id },
+        data: { status: "approved", version, approvedById: user.id, approvedAt: new Date() },
+      });
+      await db.knowledgeRevision.create({
+        data: {
+          tenantId: user.tenantId,
+          docId: doc.id,
+          version,
+          title: doc.title,
+          body: doc.body,
+          authorId: doc.authorId,
+          approvedById: user.id,
+        },
+      });
+    }
+
+    await db.knowledgeSource.updateMany({
+      where: { id, tenantId: user.tenantId },
+      data: { status: "done" },
+    });
+
+    await db.auditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actor: `user:${user.id}`,
+        action: "knowledge.bulk_approved",
+        subject: `KnowledgeSource:${id}`,
+        after: { approved: drafts.length },
+      },
+    });
+
+    logger.info("knowledge bulk approved", { tenantId: user.tenantId, count: drafts.length });
     revalidatePath("/admin/knowledge");
   });
 }

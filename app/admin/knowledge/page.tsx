@@ -1,7 +1,13 @@
 import { requireUser, asTenant } from "@/lib/auth/guard";
 import { buildKnowledgeContext } from "@/lib/knowledge";
-import { approveDoc, archiveDoc, restoreDoc } from "./actions";
-import { NewDocForm, EditDocForm } from "./DocForms";
+import {
+  approveDoc,
+  archiveDoc,
+  restoreDoc,
+  deleteSource,
+  approveAllFromSource,
+} from "./actions";
+import { NewDocForm, EditDocForm, UploadForm } from "./DocForms";
 import { Button, Empty, PageHeader, Pill, Row, Section } from "../ui";
 
 export const dynamic = "force-dynamic";
@@ -16,13 +22,20 @@ export const dynamic = "force-dynamic";
 export default async function KnowledgePage() {
   const user = await requireUser();
 
-  const { docs, context } = await asTenant(user, async (db) => ({
+  const { docs, context, sources } = await asTenant(user, async (db) => ({
     docs: await db.knowledgeDoc.findMany({
       where: { tenantId: user.tenantId },
       orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+      include: { source: { select: { filename: true } } },
     }),
     context: await buildKnowledgeContext(db, user.tenantId),
+    sources: await db.knowledgeSource.findMany({
+      where: { tenantId: user.tenantId },
+      orderBy: { createdAt: "desc" },
+    }),
   }));
+
+  const working = sources.filter((s) => s.status === "extracting");
 
   const drafts = docs.filter((d) => d.status === "draft");
   const live = docs.filter((d) => d.status === "approved");
@@ -35,7 +48,60 @@ export default async function KnowledgePage() {
         lede="The assistant can only repeat what is written here. Anything else — how a treatment works, what to expect, how to prepare — it hands to a colleague rather than guessing. Nothing goes live until someone approves it."
       />
 
-      <Section title="Write an article" boxed>
+      <Section title="Upload a document" boxed>
+        <UploadForm />
+      </Section>
+
+      {sources.length > 0 && (
+        <Section title="Documents you've uploaded">
+          <ul className="flex flex-col gap-2">
+            {sources.map((s) => (
+              <Row key={s.id}>
+                <span className="font-mono text-sm font-semibold">{s.filename}</span>
+                <span className="font-mono text-[11px] tabular-nums text-ink-3">
+                  {(s.byteSize / 1024).toFixed(0)} KB
+                  {s.pageCount ? ` · ${s.pageCount} pages` : ""}
+                </span>
+
+                {s.status === "extracting" && <Pill tone="warn">reading…</Pill>}
+                {s.status === "review" && (
+                  <Pill tone="warn">{s.chunkCount} draft{s.chunkCount === 1 ? "" : "s"} to check</Pill>
+                )}
+                {s.status === "done" && <Pill tone="ok">reviewed</Pill>}
+                {s.status === "failed" && <Pill tone="bad">couldn&apos;t read it</Pill>}
+
+                {s.failureNote && (
+                  <span className="w-full text-sm text-ink-2">{s.failureNote}</span>
+                )}
+
+                <div className="ml-auto flex items-center gap-4">
+                  {s.status === "review" && s.chunkCount > 0 && (
+                    <form action={approveAllFromSource}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <Button type="submit" variant="quiet">
+                        approve all {s.chunkCount}
+                      </Button>
+                    </form>
+                  )}
+                  <form action={deleteSource}>
+                    <input type="hidden" name="id" value={s.id} />
+                    <Button type="submit" variant="quiet">
+                      delete
+                    </Button>
+                  </form>
+                </div>
+              </Row>
+            ))}
+          </ul>
+          {working.length > 0 && (
+            <p className="text-[11px] text-ink-3">
+              Reading a document takes a minute or two. Refresh the page to see the drafts.
+            </p>
+          )}
+        </Section>
+      )}
+
+      <Section title="Or write one by hand" boxed>
         <NewDocForm />
       </Section>
 
@@ -52,6 +118,12 @@ export default async function KnowledgePage() {
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                     <span className="font-mono text-sm font-semibold">{d.title}</span>
                     <Pill tone="warn">draft</Pill>
+                    {d.source && (
+                      <span className="font-mono text-[11px] text-ink-3">
+                        {d.source.filename}
+                        {d.sourcePage ? ` · p${d.sourcePage}` : ""}
+                      </span>
+                    )}
                     {d.tags.map((t) => (
                       <Pill key={t}>{t}</Pill>
                     ))}

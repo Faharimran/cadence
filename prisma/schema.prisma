@@ -98,6 +98,7 @@ model Tenant {
   webhookEndpoints WebhookEndpoint[]
   auditLogs        AuditLog[]
   knowledgeDocs    KnowledgeDoc[]
+  knowledgeSources KnowledgeSource[]
 
   @@index([status])
 }
@@ -844,6 +845,15 @@ model KnowledgeDoc {
   tenantId String
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  /// Where this came from, when it was not typed by hand. Set for every chunk
+  /// lifted out of an uploaded document, so a reviewer can see which file and
+  /// which page a paragraph belongs to before signing it off — and so a customer
+  /// asking "where does it say that?" has an answer.
+  sourceId   String?
+  source     KnowledgeSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  /// 1-based page in the original document. Null for hand-written articles.
+  sourcePage Int?
+
   /// Phrased as the customer would ask it — "How long does recovery take?" —
   /// because the title is matched against their question, so it earns its keep.
   title String
@@ -875,6 +885,65 @@ model KnowledgeDoc {
   /// Two docs with the same title is always a mistake — someone edited a copy.
   @@unique([tenantId, title])
   @@index([tenantId, status])
+  @@index([sourceId])
+}
+
+/// A document a business uploaded, and the record of what was made from it.
+///
+/// The file itself is deliberately NOT stored. What a business uploads is often
+/// an internal deck carrying dealer cost, margin bands or half-finished pricing;
+/// keeping the original around means keeping a liability whose only use is to be
+/// leaked. What is worth keeping is the extracted text — reviewable, editable,
+/// and the thing the chunks were actually derived from.
+///
+/// `checksum` is what makes re-uploading the same brochure idempotent instead of
+/// doubling every article in the corpus.
+model KnowledgeSource {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  filename  String
+  mimeType  String
+  byteSize  Int
+  /// SHA-256 of the uploaded bytes.
+  checksum  String
+  pageCount Int?
+
+  /// Everything the extractor got, page-delimited. Kept so a reviewer can see
+  /// what a chunk was taken from, and so re-chunking never needs the file back.
+  extractedText String?
+
+  status      KnowledgeSourceStatus @default(extracting)
+  /// Why it failed, in words a receptionist can act on ("this PDF is a scan —
+  /// there is no text in it to read").
+  failureNote String?
+
+  /// How many drafts came out of it. Denormalised because the list screen shows
+  /// it for every source and the docs themselves may since have been deleted.
+  chunkCount Int @default(0)
+
+  uploadedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  docs KnowledgeDoc[]
+
+  /// The same file uploaded twice is the same source, not a second copy.
+  @@unique([tenantId, checksum])
+  @@index([tenantId, status])
+}
+
+enum KnowledgeSourceStatus {
+  /// Text is being pulled out and split up.
+  extracting
+  /// Chunks exist as drafts and are waiting for someone to read them.
+  review
+  /// Every chunk from it has been approved or discarded.
+  done
+  /// Nothing usable came out. `failureNote` says why.
+  failed
 }
 
 enum KnowledgeStatus {

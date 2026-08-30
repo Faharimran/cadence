@@ -47,6 +47,7 @@ const TENANT_SCOPED_TABLES = [
   "ConversationMessage",
   "KnowledgeDoc",
   "KnowledgeRevision",
+  "KnowledgeSource",
   "ChannelAccount",
   "IdempotencyRecord",
   "WebhookEndpoint",
@@ -127,6 +128,64 @@ async function applyOverlapConstraint() {
   }
 }
 
+/**
+ * Full-text search over the knowledge corpus.
+ *
+ * A generated column rather than an application-maintained one: there is no
+ * trigger to forget and no write path that can leave the index disagreeing with
+ * the text. Postgres recomputes it on every insert and update, including the
+ * ones a migration or a manual fix makes.
+ *
+ * Weighting matters more than it looks. A title here is the question a customer
+ * would ask, so a hit there is far stronger evidence than the same word buried
+ * in prose — 'A' against 'B'.
+ *
+ * Tags are deliberately NOT in the vector. `array_to_string` is only STABLE, not
+ * IMMUTABLE, so Postgres refuses it in a generated column — and the workaround
+ * (a hand-rolled IMMUTABLE wrapper) would buy nothing here, because tags are
+ * already an exact filter on the query rather than something to rank by.
+ *
+ * What this buys over scoring in JavaScript is **stemming**. Without it "pay"
+ * does not match "payments" and "finance" does not match "financing", so an
+ * article titled "What ways can I pay for a car?" loses to one that merely
+ * happens to contain the word "finance".
+ */
+async function applyKnowledgeSearch() {
+  const [{ exists }] = await prisma.$queryRawUnsafe<{ exists: boolean }[]>(`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'KnowledgeDoc' AND column_name = 'search'
+    ) AS exists
+  `);
+
+  if (!exists) {
+    // The two-argument form of to_tsvector with a literal config is IMMUTABLE,
+    // which is what makes it legal in a generated column. The single-argument
+    // form depends on a session setting and is rejected.
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "KnowledgeDoc" ADD COLUMN search tsvector
+        GENERATED ALWAYS AS (
+          setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+          setweight(to_tsvector('english', coalesce(body, '')), 'B')
+        ) STORED
+    `);
+    console.log("  ✓ KnowledgeDoc.search (generated tsvector)");
+  } else {
+    console.log("  · knowledge search column already present");
+  }
+
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS knowledge_doc_search ON "KnowledgeDoc" USING GIN (search)`,
+  );
+
+  // The app role needs to read the new column like any other.
+  await prisma.$executeRawUnsafe(
+    `GRANT SELECT ON "KnowledgeDoc" TO ${APP_ROLE}`,
+  ).catch(() => {
+    /* role may not exist on a fresh clone; RLS setup reports that separately */
+  });
+}
+
 /** Proves the two guarantees hold, rather than assuming the DDL above was enough. */
 async function verify() {
   const appUrl = process.env.DATABASE_APP_URL;
@@ -199,6 +258,7 @@ async function main() {
   console.log("Applying database-level guarantees…");
   await applyRowLevelSecurity();
   await applyOverlapConstraint();
+  await applyKnowledgeSearch();
 
   if (process.argv.includes("--verify")) {
     console.log("Verifying…");

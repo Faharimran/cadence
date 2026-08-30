@@ -58,6 +58,14 @@ async, and route handlers are uncached by default.
    written down is not known. A model filling that gap from what it knows about the
    industry is inventing a promise the business then has to honour.
 
+8. **Uploads land as drafts, and the model titles rather than writes.** An uploaded
+   company document routinely carries dealer cost, margin bands and staff instructions, so
+   there is no upload-to-live path and there must never be one. Ingestion may decide what
+   question a passage answers and whether to keep it at all; the body stays byte-for-byte
+   the document's own words. The uploaded file itself is never stored — the bytes sit in
+   Redis under a one-hour TTL between the request and the worker, and only the extracted
+   text is kept.
+
 ## What cadence is not
 
 It books **appointments** — something a customer occupies for a duration. Retail and food
@@ -69,7 +77,8 @@ bridges that gap. Say so rather than stretching the model to fit.
 | Path | Holds |
 |---|---|
 | `lib/engine/` | Availability, holds, bookings, promotions. The sellable core. |
-| `lib/conversation/` | Agent loop, tool assembly, snapshots, knowledge. |
+| `lib/conversation/` | Agent loop, tool assembly, snapshots. |
+| `lib/knowledge/` | Retrieval, PDF extraction, chunking, ingestion. |
 | `lib/channels/` | WhatsApp, web widget, etc. Transport only. |
 | `lib/connectors/` | Per-CRM adapters implementing the canonical interface. |
 | `lib/api/` | Auth, tenant context, idempotency, error shapes. |

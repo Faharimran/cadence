@@ -15,8 +15,12 @@
  *
  * Run: npx dotenv -e .env.local -- npx tsx scripts/proveKnowledge.ts
  */
+import { readFileSync } from "node:fs";
 import { adminDb, withTenant } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
+import { extractPdf } from "@/lib/knowledge/extract";
+import { chunkPages } from "@/lib/knowledge/chunk";
+import { ingestSource, checksumOf } from "@/lib/knowledge/ingest";
 import {
   buildKnowledgeContext,
   loadApproved,
@@ -51,6 +55,8 @@ function check(label: string, condition: boolean, detail?: string) {
 async function cleanup() {
   await adminDb.tenant.deleteMany({ where: { slug: { startsWith: "kn-probe" } } });
   await adminDb.user.deleteMany({ where: { email: { endsWith: "@example.test" } } });
+  await adminDb.knowledgeDoc.deleteMany({ where: { title: { startsWith: "__probe" } } });
+  await adminDb.knowledgeSource.deleteMany({ where: { filename: { startsWith: "__probe" } } });
 }
 
 async function main() {
@@ -477,6 +483,201 @@ async function main() {
       duplicateRejected = true;
     }
     check("the same email cannot own two businesses", duplicateRejected);
+  }
+
+  // ── Reading an uploaded document ────────────────────────────────────
+  console.log("\nReading an uploaded document");
+  {
+    const bytes = new Uint8Array(readFileSync("fixtures/sample-handbook.pdf"));
+
+    // pdf.js takes ownership of the buffer it is given and detaches it. Nothing
+    // downstream expects that, and the failure it produces is "unreadable PDF"
+    // on a file that read perfectly a moment earlier.
+    const first = await extractPdf(bytes);
+    check("a PDF extracts", first.ok, first.ok ? "" : first.reason);
+    check("and the caller's buffer survives it", bytes.byteLength > 0);
+    const second = await extractPdf(bytes);
+    check("so the same bytes can be read twice", second.ok);
+
+    if (!first.ok) throw new Error("fixture did not extract");
+
+    const chunks = chunkPages(first.pages);
+    check("it splits into passages", chunks.length >= 4, `${chunks.length}`);
+    check(
+      "headings are lifted out rather than glued to the paragraph below",
+      chunks.some((c) => c.heading?.includes("COURTESY")),
+      chunks.map((c) => c.heading ?? "—").join(" | "),
+    );
+    check(
+      "no passage is a bare heading",
+      chunks.every((c) => c.text.length > 100),
+    );
+    check("every passage knows its page", chunks.every((c) => c.page >= 1));
+
+    const garbage = await extractPdf(new Uint8Array([1, 2, 3, 4, 5]));
+    check("a file that is not a PDF is refused", !garbage.ok);
+    check(
+      "and the reason is one a receptionist can act on",
+      !garbage.ok && garbage.message.length > 20 && !garbage.message.includes("Error"),
+      garbage.ok ? "" : garbage.message,
+    );
+  }
+
+  // ── Ingestion lands as drafts ───────────────────────────────────────
+  console.log("\nWhat an upload does to the corpus");
+  {
+    const bytes = new Uint8Array(readFileSync("fixtures/sample-handbook.pdf"));
+    const before = await withTenant(t, (db) => loadApproved(db, t));
+
+    const source = await adminDb.knowledgeSource.create({
+      data: {
+        tenantId: t,
+        filename: "__probe-handbook.pdf",
+        mimeType: "application/pdf",
+        byteSize: bytes.byteLength,
+        checksum: checksumOf(bytes),
+      },
+    });
+
+    const outcome = await withTenant(
+      t,
+      (db) => ingestSource(db, { tenantId: t, sourceId: source.id, bytes }),
+      { timeoutMs: 600_000 },
+    );
+
+    check("it produced articles", outcome.status === "review" && outcome.chunkCount > 0,
+      `${outcome.status} / ${outcome.chunkCount}`);
+
+    const produced = await adminDb.knowledgeDoc.findMany({
+      where: { tenantId: t, sourceId: source.id },
+    });
+
+    // The whole safety story for uploads. A company handbook routinely carries
+    // internal rates and staff instructions; upload-to-live hands all of it to
+    // the assistant.
+    check(
+      "EVERY article from an upload is a draft",
+      produced.length > 0 && produced.every((d) => d.status === "draft"),
+      produced.map((d) => d.status).join(","),
+    );
+    check(
+      "so the corpus the assistant can see is unchanged by an upload",
+      (await withTenant(t, (db) => loadApproved(db, t))).length === before.length,
+    );
+    check(
+      "each one records which file and page it came from",
+      produced.every((d) => d.sourceId === source.id && d.sourcePage !== null),
+    );
+    // The rule the whole design rests on: the model titles, it never writes.
+    // Every body must appear verbatim in what was pulled out of the file.
+    const stored = await adminDb.knowledgeSource.findUniqueOrThrow({
+      where: { id: source.id },
+      select: { extractedText: true },
+    });
+    const haystack = (stored.extractedText ?? "").replace(/\s+/g, " ");
+    check(
+      "bodies are the document's own words, not the model's",
+      produced.every((d) => {
+        const opening = d.body
+          .replace(/^\*\*[^*]*\*\*\n\n/, "") // drop the heading the chunker prepended
+          .replace(/\s+/g, " ")
+          .slice(0, 50);
+        return haystack.includes(opening);
+      }),
+    );
+    check(
+      "titles are phrased as questions a customer would ask",
+      produced.filter((d) => d.title.includes("?")).length >= produced.length - 1,
+      produced.map((d) => d.title).join(" | "),
+    );
+
+    const sameFile = await adminDb.knowledgeSource.findFirst({
+      where: { tenantId: t, checksum: checksumOf(bytes) },
+    });
+    check("re-uploading the same file finds the existing source", sameFile?.id === source.id);
+
+    // Deleting a source takes its drafts but must never touch what was signed
+    // off — those are live answers now, whatever their origin.
+    const [keptDraft, ...rest] = produced;
+    await adminDb.knowledgeDoc.update({
+      where: { id: keptDraft.id },
+      data: { status: "approved", approvedAt: new Date() },
+    });
+    await adminDb.knowledgeDoc.deleteMany({
+      where: { tenantId: t, sourceId: source.id, status: "draft" },
+    });
+    await adminDb.knowledgeSource.delete({ where: { id: source.id } });
+
+    const survivor = await adminDb.knowledgeDoc.findUnique({ where: { id: keptDraft.id } });
+    check("deleting the source leaves approved articles standing", survivor !== null);
+    check(
+      "and their text is intact with the source gone",
+      survivor?.sourceId === null && (survivor?.body.length ?? 0) > 0,
+    );
+    check("while the unapproved drafts go with it", rest.length > 0);
+
+    await adminDb.knowledgeDoc.deleteMany({ where: { id: keptDraft.id } });
+  }
+
+  // ── Full-text retrieval ─────────────────────────────────────────────
+  console.log("\nFinding the right article");
+  {
+    const target = await adminDb.knowledgeDoc.create({
+      data: {
+        tenantId: t,
+        title: "__probe Can I finance a treatment?",
+        body: "We offer monthly instalments through a partner. Ask at reception.",
+        status: "approved",
+        approvedAt: new Date(),
+      },
+    });
+    // Shares one incidental word with the question and nothing else. This is the
+    // shape of document that used to win.
+    const decoy = await adminDb.knowledgeDoc.create({
+      data: {
+        tenantId: t,
+        title: "__probe What is the monthly cleaning rota?",
+        body: "Unrelated text about something else entirely.",
+        status: "approved",
+        approvedAt: new Date(),
+      },
+    });
+
+    const stemmed = await withTenant(t, (db) =>
+      searchKnowledge(db, t, { query: "financing options", limit: 3 }),
+    );
+    check(
+      "'financing' finds an article titled 'finance' — inflections stop mattering",
+      stemmed.some((h) => h.id === target.id),
+      stemmed.map((h) => h.title).join(" | "),
+    );
+
+    // The fix that mattered on the real document: matching two query terms beats
+    // matching one, rather than every hit counting the same.
+    const ranked = await withTenant(t, (db) =>
+      searchKnowledge(db, t, { query: "monthly financing", limit: 3 }),
+    );
+    check(
+      "matching more of the question outranks matching one stray word",
+      ranked[0]?.id === target.id,
+      ranked.map((h) => h.title).join(" | "),
+    );
+
+    // Stated as an assertion rather than left as folklore: stemming handles
+    // inflections, not vocabulary. Someone will eventually expect it to.
+    // "credit" and "arrangements" share no stem with "finance", "monthly",
+    // "instalments", "partner" or "reception" — though a person would read the
+    // question as asking exactly what that article answers.
+    const vocabulary = await withTenant(t, (db) =>
+      searchKnowledge(db, t, { query: "credit arrangements", limit: 3 }),
+    );
+    check(
+      "but a question sharing no word stem still misses — the gap embeddings close",
+      !vocabulary.some((h) => h.id === target.id),
+      vocabulary.map((h) => h.title).join(" | ") || "(nothing)",
+    );
+
+    await adminDb.knowledgeDoc.deleteMany({ where: { id: { in: [target.id, decoy.id] } } });
   }
 
   // ── Isolation ───────────────────────────────────────────────────────

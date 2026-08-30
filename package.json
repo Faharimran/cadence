@@ -12,7 +12,7 @@
     "worker": "tsx workers/index.ts",
     "worker:dev": "dotenv -e .env.local -- tsx watch workers/index.ts",
     "db:generate": "prisma generate",
-    "db:push": "dotenv -e .env.local -- prisma db push   # local iteration only \u2014 deploys use db:migrate:deploy",
+    "db:push": "dotenv -e .env.local -- prisma db push   # local iteration only — deploys use db:migrate:deploy",
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev",
     "db:migrate:deploy": "dotenv -e .env.local -- prisma migrate deploy",
     "db:studio": "dotenv -e .env.local -- prisma studio",
@@ -48,6 +48,7 @@
     "react-dom": "19.2.4",
     "rrule": "^2.8.1",
     "tsx": "^4.22.4",
+    "unpdf": "^1.8.1",
     "winston": "^3.19.0",
     "zod": "^4.4.3"
   },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { createDoc, updateDoc, type KnowledgeFormState } from "./actions";
+import { createDoc, updateDoc, uploadSource, type KnowledgeFormState } from "./actions";
 import { Button, Field, inputClass } from "../ui";
 
 function Feedback({ state }: { state: KnowledgeFormState }) {
@@ -21,6 +21,47 @@ function Feedback({ state }: { state: KnowledgeFormState }) {
 }
 
 const textareaClass = `${inputClass} min-h-[11rem] resize-y font-sans leading-relaxed`;
+
+/**
+ * The copy here is doing safety work, not marketing.
+ *
+ * Someone uploading a company deck needs to know two things before they choose
+ * the file: nothing goes live unread, and the assistant will only ever repeat
+ * what they approve. Told afterwards, on a review screen, it is too late — they
+ * have already uploaded the deck with the margin table in it.
+ */
+export function UploadForm() {
+  const [state, action, pending] = useActionState<KnowledgeFormState, FormData>(uploadSource, null);
+
+  return (
+    <form action={action} className="flex flex-col gap-4">
+      <Field
+        label="PDF"
+        hint="A company profile, a brochure, a policy document, a price list. Up to 15 MB."
+      >
+        <input
+          type="file"
+          name="file"
+          accept="application/pdf,.pdf"
+          required
+          className={`${inputClass} file:mr-3 file:rounded file:border-0 file:bg-accent file:px-3 file:py-1 file:text-sm file:text-white`}
+        />
+      </Field>
+
+      <p className="max-w-[66ch] text-[11px] leading-relaxed text-ink-3">
+        We&apos;ll read it, split it into answers, and title each one with the question a customer
+        would ask. Everything arrives as a <strong>draft</strong> — the assistant cannot see any of
+        it until you approve it. Company documents often carry internal pricing and staff notes, so
+        read before you approve.
+      </p>
+
+      <Feedback state={state} />
+      <Button type="submit" disabled={pending}>
+        {pending ? "Uploading…" : "Upload and read it"}
+      </Button>
+    </form>
+  );
+}
 
 /**
  * The hint text does real work here. Left to themselves people write articles
