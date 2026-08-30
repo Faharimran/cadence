@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { currentOperator } from "@/lib/platform/guard";
+import { readTheme } from "@/lib/theme";
+import { ThemeToggle } from "@/app/ThemeToggle";
 import { platformSignOut } from "./actions";
 
 /**
@@ -16,6 +18,7 @@ import { platformSignOut } from "./actions";
  */
 export default async function PlatformLayout({ children }: { children: React.ReactNode }) {
   const operator = await currentOperator();
+  const theme = await readTheme();
 
   // No operator means this is the sign-in page — render it bare rather than
   // wrapping it in chrome that names somebody who isn't signed in.
@@ -48,10 +51,11 @@ export default async function PlatformLayout({ children }: { children: React.Rea
             </span>
           </Link>
 
-          <div className="ml-auto flex items-center gap-4">
+          <div className="ml-auto flex items-center gap-3">
             <span className="hidden font-mono text-[11px] text-on-shell-2 sm:inline">
               {operator.email} · {operator.role}
             </span>
+            <ThemeToggle initial={theme} onShell />
             <form action={platformSignOut}>
               <button
                 type="submit"

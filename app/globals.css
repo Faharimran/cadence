@@ -43,29 +43,94 @@
   --console-2: #1e2836;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Dimmed rather than re-hued: the shell must stay recognisably itself, and
-       a full-strength blue band under a dark UI is a headache by mid-afternoon. */
-    --shell: #1d4f9e;
-    --shell-2: #163c78;
-    --on-shell-2: #a6c4ee;
-    --shell-hair: rgba(255, 255, 255, 0.12);
-    --console: #0c111a;
-    --console-2: #161e2a;
+/* ───────────────────────────────────────────────────────────────────────
+   Dark values, defined once.
 
-    --paper: #0e141b;
-    --surface: #151e28;
-    --surface-2: #1d2833;
-    --rule: #2e3d4c;
-    --ink: #e4ebf2;
-    --ink-2: #a2b2c4;
-    --ink-3: #6f8298;
-    --accent: #6fa0f0;
-    --ok: #57c696;
-    --warn: #e0a44a;
-    --bad: #e58880;
+   Theme has THREE states, not two. An explicit choice stamps
+   data-theme="light" or "dark" on <html>; the default — "follow the system" —
+   stamps nothing, and only prefers-color-scheme separates light from dark
+   there. So each palette needs to win in every one of those cases, which means
+   the mapping below appears twice: once guarded against an explicit light
+   choice beating a dark OS, and once for an explicit dark choice beating a
+   light OS.
+
+   The mapping is duplicated; the VALUES are not. Every colour lives exactly
+   once as a --dk-* source variable, so changing one is a single edit and the
+   two blocks cannot drift apart in appearance.
+   ─────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Shell dimmed rather than re-hued: it must stay recognisably itself, and a
+     full-strength blue band under a dark UI is a headache by mid-afternoon. */
+  --dk-shell: #1d4f9e;
+  --dk-shell-2: #163c78;
+  --dk-on-shell-2: #a6c4ee;
+  --dk-shell-hair: rgba(255, 255, 255, 0.12);
+  --dk-console: #0c111a;
+  --dk-console-2: #161e2a;
+
+  --dk-paper: #0e141b;
+  --dk-surface: #151e28;
+  --dk-surface-2: #1d2833;
+  --dk-rule: #2e3d4c;
+  --dk-ink: #e4ebf2;
+  --dk-ink-2: #a2b2c4;
+  --dk-ink-3: #6f8298;
+  --dk-accent: #6fa0f0;
+  --dk-ok: #57c696;
+  --dk-warn: #e0a44a;
+  --dk-bad: #e58880;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* A dark OS, unless the person explicitly asked for light. */
+  :root:not([data-theme="light"]) {
+    --shell: var(--dk-shell);
+    --shell-2: var(--dk-shell-2);
+    --on-shell-2: var(--dk-on-shell-2);
+    --shell-hair: var(--dk-shell-hair);
+    --console: var(--dk-console);
+    --console-2: var(--dk-console-2);
+    --paper: var(--dk-paper);
+    --surface: var(--dk-surface);
+    --surface-2: var(--dk-surface-2);
+    --rule: var(--dk-rule);
+    --ink: var(--dk-ink);
+    --ink-2: var(--dk-ink-2);
+    --ink-3: var(--dk-ink-3);
+    --accent: var(--dk-accent);
+    --ok: var(--dk-ok);
+    --warn: var(--dk-warn);
+    --bad: var(--dk-bad);
   }
+}
+
+/* An explicit dark choice, whatever the OS says. */
+:root[data-theme="dark"] {
+  --shell: var(--dk-shell);
+  --shell-2: var(--dk-shell-2);
+  --on-shell-2: var(--dk-on-shell-2);
+  --shell-hair: var(--dk-shell-hair);
+  --console: var(--dk-console);
+  --console-2: var(--dk-console-2);
+  --paper: var(--dk-paper);
+  --surface: var(--dk-surface);
+  --surface-2: var(--dk-surface-2);
+  --rule: var(--dk-rule);
+  --ink: var(--dk-ink);
+  --ink-2: var(--dk-ink-2);
+  --ink-3: var(--dk-ink-3);
+  --accent: var(--dk-accent);
+  --ok: var(--dk-ok);
+  --warn: var(--dk-warn);
+  --bad: var(--dk-bad);
+}
+
+/* Lets form controls, scrollbars and the like follow the chosen theme too. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 
 /* ───────────────────────────────────────────────────────────────────────

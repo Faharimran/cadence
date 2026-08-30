@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
+import { readTheme } from "@/lib/theme";
 import { signOut } from "@/app/signin/actions";
+import { ThemeToggle } from "@/app/ThemeToggle";
 import { NavTabs } from "./NavTabs";
 
 /**
@@ -33,6 +35,7 @@ const NAV = [
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
+  const theme = await readTheme();
 
   return (
     <div className="flex min-h-screen flex-col bg-paper">
@@ -51,10 +54,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </span>
           </Link>
 
-          <div className="ml-auto flex items-center gap-4">
+          <div className="ml-auto flex items-center gap-3">
             <span className="hidden font-mono text-[11px] text-on-shell-2 sm:inline">
               {user.email} · {user.role}
             </span>
+            <ThemeToggle initial={theme} onShell />
             <form action={signOut}>
               <button
                 type="submit"

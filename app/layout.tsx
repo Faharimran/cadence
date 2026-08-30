@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque } from "next/font/google";
+import { readTheme, themeAttribute } from "@/lib/theme";
 import "./globals.css";
 
 /**
@@ -25,9 +26,14 @@ export const metadata: Metadata = {
     "cadence answers your customers on WhatsApp, books into your real calendar, and hands over anything you have not approved it to say.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Stamped server-side so the first paint is already the right theme. Read
+  // from a cookie on the client instead and the page renders in the default
+  // and corrects a frame later — the flash every hand-rolled toggle has.
+  const theme = await readTheme();
+
   return (
-    <html lang="en" className={`h-full ${display.variable}`}>
+    <html lang="en" className={`h-full ${display.variable}`} {...themeAttribute(theme)}>
       <body className="min-h-full antialiased">{children}</body>
     </html>
   );
