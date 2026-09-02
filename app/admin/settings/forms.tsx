@@ -187,13 +187,20 @@ export function WhatsAppForm({
   return (
     <form action={action} className="flex flex-col gap-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Phone number ID" hint="From Meta. This is how inbound messages find you.">
+        {/* Editable after saving, deliberately. Meta shows the WhatsApp
+            Business Account id right beside the phone number id, and picking
+            the wrong one still passes verification — it only shows up later as
+            messages that never arrive. Locking this field made that typo
+            uncorrectable without touching the database. */}
+        <Field
+          label="Phone number ID"
+          hint="From Meta's API Setup, under the From number. Not the WhatsApp Business Account ID beside it."
+        >
           <input
             name="externalAccountId"
             required
             className={inputClass}
             defaultValue={existing?.externalAccountId ?? ""}
-            readOnly={Boolean(existing)}
           />
         </Field>
         <Field label="Display number">

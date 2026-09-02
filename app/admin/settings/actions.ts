@@ -243,7 +243,18 @@ export async function saveWhatsAppAccount(
     };
 
     if (existing) {
-      await db.channelAccount.update({ where: { id: existing.id }, data });
+      // The phone number id is editable after the fact, and has to be.
+      //
+      // It used to be create-only, and the form rendered it read-only to match.
+      // But it is the single easiest value to get wrong — Meta shows the
+      // WhatsApp Business Account id immediately beside it — and getting it
+      // wrong is invisible: verification still succeeds, and inbound messages
+      // are then silently dropped as "unknown account". Being unable to correct
+      // it without database access made a typo unrecoverable.
+      await db.channelAccount.update({
+        where: { id: existing.id },
+        data: { ...data, externalAccountId: input.externalAccountId.trim() },
+      });
     } else {
       await db.channelAccount.create({
         data: {

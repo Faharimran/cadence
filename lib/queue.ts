@@ -47,7 +47,17 @@ export function agentTurns(): Queue {
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: "exponential", delay: 2_000 },
-      removeOnComplete: { age: 3_600, count: 500 },
+      // Removed the instant it finishes, NOT retained for an hour.
+      //
+      // The job id is the conversation id, and BullMQ silently ignores `add()`
+      // for an id that still exists — completed or not. Keeping finished jobs
+      // around therefore meant a thread could be answered once and then went
+      // deaf for the whole retention window: every later message was recorded,
+      // no turn was ever queued, and nothing anywhere reported an error.
+      //
+      // Retention was only ever for inspecting history, which the transcript
+      // and the logs already cover.
+      removeOnComplete: true,
       removeOnFail: { age: 86_400 },
     },
   });
@@ -87,15 +97,27 @@ export async function scheduleAgentTurn(job: AgentTurnJob): Promise<void> {
     const existing = await queue.getJob(jobId);
     if (existing) {
       const state = await existing.getState();
-      if (state === "delayed" || state === "waiting") {
-        await existing.remove();
-      }
+      // Any state that is not currently running is cleared, including
+      // `completed` and `failed`. Only `delayed` and `waiting` used to be, so a
+      // finished job kept its id occupied and the `add` below became a silent
+      // no-op — the bug that made a thread answer once and then ignore
+      // everything after it.
+      if (state !== "active") await existing.remove();
     }
   } catch (err) {
     logger.debug("debounce: could not remove pending turn", { err: String(err) });
   }
 
-  await queue.add("reply", job, { jobId, delay: DEBOUNCE_MS });
+  const added = await queue.add("reply", job, { jobId, delay: DEBOUNCE_MS });
+
+  // BullMQ returns a job whose id is not the one we asked for when it declined
+  // to create it. Silence here is what let the original bug hide, so say so.
+  if (added.id !== jobId) {
+    logger.error("debounce: turn was NOT queued — job id already taken", {
+      conversationId: job.conversationId,
+      got: added.id,
+    });
+  }
 }
 
 /**
