@@ -139,10 +139,22 @@ async function main() {
     process.exit(1);
   }
 
+  // Only a reply NEWER than the message just sent counts.
+  //
+  // This originally looked for any outbound message on the thread and reported
+  // the newest, which meant an earlier reply was presented as if it were the
+  // answer to this one — a passing test on a thread where nothing had happened.
+  // The bug it hid was real: turns had stopped queueing entirely.
+  const sentAt = new Date();
+
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 2000));
     const reply = await adminDb.conversationMessage.findFirst({
-      where: { conversationId: conversation.id, direction: "outbound" },
+      where: {
+        conversationId: conversation.id,
+        direction: "outbound",
+        createdAt: { gt: sentAt },
+      },
       orderBy: { createdAt: "desc" },
     });
     if (reply) {
