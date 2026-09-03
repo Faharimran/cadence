@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   createLocation,
   createExceptionType,
@@ -28,6 +28,110 @@ function Feedback({ state }: { state: SettingsFormState }) {
 
 const textareaClass = `${inputClass} min-h-[6rem] resize-y font-sans leading-relaxed`;
 
+/**
+ * Ready-made ways for the assistant to write.
+ *
+ * Phrased as instructions to the assistant, not as labels, because the chosen
+ * text goes into the prompt verbatim — "Formal" tells a model nothing, whereas
+ * the sentence beneath it does. Picking one fills the box and leaves it
+ * editable: most businesses want one of these with a clause of their own added,
+ * and starting from a blank field is what leaves it blank.
+ *
+ * Deliberately vertical-neutral. A clinic and a barber both pick from the same
+ * list; what makes them different is what they write in it afterwards.
+ */
+const TONE_PRESETS: { label: string; value: string }[] = [
+  {
+    label: "Warm and brief",
+    value: "Write like a good receptionist texting: warm, brief, one idea per message.",
+  },
+  {
+    label: "Friendly and casual",
+    value:
+      "Friendly and casual — first names, contractions, the way you'd talk to someone across the counter.",
+  },
+  {
+    label: "Formal and precise",
+    value:
+      "Formal and precise. Full sentences, no slang or abbreviations, and address people as Mr or Ms unless they say otherwise.",
+  },
+  {
+    label: "Calm and reassuring",
+    value:
+      "Calm and reassuring. Take the worry out of it, never rush anyone, and never promise how something will turn out.",
+  },
+  {
+    label: "Short and efficient",
+    value:
+      "Short and efficient. Answer the question and stop — no pleasantries, no filler, no repeating the question back.",
+  },
+  {
+    label: "Careful, never clinical",
+    value:
+      "Write carefully and plainly. Explain what happens, never give an opinion on what someone should have done, and hand anything technical to a person.",
+  },
+];
+
+/**
+ * Tone, as a pick-one-then-edit rather than a blank box.
+ *
+ * The textarea is the field that actually saves; the dropdown only writes into
+ * it. That keeps a single source of truth — whatever is in the box is what the
+ * assistant is told — and means an edited preset is just text, with no state to
+ * reconcile about whether it is "still" a preset.
+ */
+function ToneField({ initial }: { initial: string }) {
+  const [tone, setTone] = useState(initial);
+
+  // Matched on exact text, so editing a preset simply shows "Custom" again.
+  const selected = TONE_PRESETS.find((p) => p.value === tone)?.value ?? "";
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Field
+        label="How it should write"
+        hint="Pick a starting point and edit it, or write your own. Left blank, it writes like a brief, warm receptionist."
+      >
+        <select
+          value={selected}
+          onChange={(e) => setTone(e.target.value)}
+          aria-label="Choose a starting point"
+          className={inputClass}
+        >
+          <option value="">
+            {tone.trim() ? "Custom — your own wording" : "Choose a starting point…"}
+          </option>
+          {TONE_PRESETS.map((p) => (
+            <option key={p.label} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <textarea
+        name="toneNote"
+        value={tone}
+        onChange={(e) => setTone(e.target.value)}
+        rows={3}
+        className={textareaClass}
+        placeholder="Friendly and short, first names."
+        aria-label="How it should write"
+      />
+
+      {tone.trim() && (
+        <button
+          type="button"
+          onClick={() => setTone("")}
+          className="self-start font-mono text-[11px] text-ink-3 underline underline-offset-2 hover:text-ink"
+        >
+          clear
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function VoiceForm({
   tenant,
 }: {
@@ -44,17 +148,7 @@ export function VoiceForm({
         <textarea name="descriptor" defaultValue={tenant.descriptor ?? ""} className={textareaClass} />
       </Field>
 
-      <Field
-        label="How it should write"
-        hint="Left blank, it writes like a brief, warm receptionist."
-      >
-        <input
-          name="toneNote"
-          defaultValue={tenant.toneNote ?? ""}
-          className={inputClass}
-          placeholder="Friendly and short, first names."
-        />
-      </Field>
+      <ToneField initial={tenant.toneNote ?? ""} />
 
       <Field
         label="Always pass these to a person"
