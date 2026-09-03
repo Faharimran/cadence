@@ -33,7 +33,11 @@
     "check": "npm run prove:engine && npm run prove:conversation && npm run prove:delivery && npm run prove:webhook && npm run prove:auth && npm run prove:knowledge && npm run prove:platform && npm run prove:debounce",
     "seed:cara": "dotenv -e .env.local -- tsx scripts/seedCaraTenant.ts",
     "live:whatsapp": "dotenv -e .env.local -- tsx scripts/liveWhatsApp.ts",
-    "prove:debounce": "dotenv -e .env.local -- tsx scripts/proveDebounce.ts"
+    "prove:debounce": "dotenv -e .env.local -- tsx scripts/proveDebounce.ts",
+    "db:approle": "dotenv -e .env.local -- tsx scripts/bootstrapAppRole.ts",
+    "start:web": "next start --port ${PORT:-3000}",
+    "start:worker": "tsx workers/index.ts",
+    "deploy:migrate": "prisma migrate deploy && tsx scripts/applyRls.ts"
   },
   "engines": {
     "node": ">=20.9"
