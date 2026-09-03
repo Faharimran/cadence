@@ -37,7 +37,8 @@
     "db:approle": "dotenv -e .env.local -- tsx scripts/bootstrapAppRole.ts",
     "start:web": "next start --port ${PORT:-3000}",
     "start:worker": "tsx workers/index.ts",
-    "deploy:migrate": "prisma migrate deploy && tsx scripts/applyRls.ts"
+    "deploy:migrate": "prisma migrate deploy && tsx scripts/bootstrapAppRole.ts && tsx scripts/applyRls.ts",
+    "start:railway": "if [ \"$CADENCE_ROLE\" = \"worker\" ]; then npm run start:worker; else npm run deploy:migrate && npm run start:web; fi"
   },
   "engines": {
     "node": ">=20.9"
