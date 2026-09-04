@@ -18,6 +18,7 @@
     "db:studio": "dotenv -e .env.local -- prisma studio",
     "db:rls": "dotenv -e .env.local -- tsx scripts/applyRls.ts",
     "seed:demo": "dotenv -e .env.local -- tsx scripts/seedDemoTenant.ts",
+    "check:whatsapp": "tsx scripts/checkWhatsApp.ts",
     "prove:engine": "dotenv -e .env.local -- tsx scripts/proveEngine.ts",
     "prove:conversation": "dotenv -e .env.local -- tsx scripts/proveConversation.ts",
     "prove": "npm run prove:engine && npm run prove:conversation && npm run prove:delivery",
