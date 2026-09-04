@@ -306,6 +306,11 @@ async function main() {
     check("and returns a pre-formatted local label", typeof out.label === "string" && out.label.length > 0, out.label);
   });
 
+  // The customer who is ALREADY holding this slot asks for it again — which is
+  // what happens every time the agent re-checks before confirming. It must get
+  // its own hold back. This assertion used to require the opposite, and that is
+  // the shape the bug arrived in: the assistant held 12:30, the customer said
+  // yes, and it announced the slot had gone. Nobody else had it. It did.
   await withTenant(t, async (db) => {
     const { tools } = await makeCtx(db, t, thread.conversationId, thread.customerId);
     const out = await call(tool(tools, "hold_slot"), {
@@ -313,7 +318,27 @@ async function main() {
       locationId: london.id,
       startsAt: target.toISOString(),
     });
-    check("a second hold on the same slot fails", out.ok === false);
+    check("re-holding your own slot succeeds", out.ok === true, JSON.stringify(out).slice(0, 120));
+    check("and hands back the same hold, not a second one", out.holdId === holdId);
+  });
+
+  // Somebody else asking for it is a real collision, and must still be one.
+  const rival = await withTenant(t, (db) =>
+    openThread(db, {
+      tenantId: t,
+      channel: "whatsapp",
+      externalThreadId: "+447700900999",
+      identity: { phone: "+447700900999", name: "Someone Else" },
+    }),
+  );
+  await withTenant(t, async (db) => {
+    const { tools } = await makeCtx(db, t, rival.conversationId, rival.customerId);
+    const out = await call(tool(tools, "hold_slot"), {
+      serviceId: session.id,
+      locationId: london.id,
+      startsAt: target.toISOString(),
+    });
+    check("another customer's hold on the same slot still fails", out.ok === false);
     check("it is marked recoverable", out.recoverable === true);
     const alts = out.details?.alternatives ?? [];
     check(

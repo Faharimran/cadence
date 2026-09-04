@@ -70,6 +70,48 @@ export async function holdSlot(db: TenantDb, req: HoldRequest): Promise<HeldBook
 
   const expiresAt = new Date(Date.now() + ttl * 1000);
 
+  // Asking to hold a slot you ALREADY hold returns that hold rather than
+  // colliding with it.
+  //
+  // Without this, a caller that holds a time, offers it, and is then asked to
+  // hold it again gets `slot_unavailable` — blocked by its own reservation.
+  // Seen in a live WhatsApp booking: the assistant held 12:30, the customer
+  // said yes, and it reported the slot gone; it then did the same at 12:00
+  // before settling on 1:00, a time nobody had asked for. Neither slot was ever
+  // taken by anyone.
+  //
+  // Scoped to the same customer, service and location, so it can never hand
+  // back somebody else's reservation.
+  const mine = await db.booking.findFirst({
+    where: {
+      tenantId: req.tenantId,
+      customerId: req.customerId,
+      serviceId: req.serviceId,
+      locationId: req.locationId,
+      startsAt: req.startsAt,
+      status: "held",
+      holdExpiresAt: { gt: new Date() },
+    },
+    include: { location: true, resources: { include: { resource: true } } },
+  });
+
+  if (mine) {
+    // Extended rather than merely returned: the customer is evidently still
+    // deciding, and letting the window lapse mid-conversation is the failure
+    // this whole path exists to avoid.
+    await db.booking.update({ where: { id: mine.id }, data: { holdExpiresAt: expiresAt } });
+    return {
+      bookingId: mine.id,
+      startsAt: mine.startsAt,
+      endsAt: mine.endsAt,
+      expiresAt,
+      label: describeInstant(mine.startsAt, mine.location.timezone),
+      locationName: mine.location.name,
+      timezone: mine.location.timezone,
+      resourceNames: mine.resources.map((r) => r.resource.name),
+    };
+  }
+
   try {
     // Re-derive the slot from live data rather than trusting the caller's idea
     // of what is free. A snapshot may be minutes old; this must not be.

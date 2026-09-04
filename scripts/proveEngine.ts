@@ -259,12 +259,28 @@ async function main() {
   // ─────────────────────────────────────────────────────────────────────
   console.log("\n9. Concurrency — five customers race for the same slot");
   const raceStart = localToInstant(monday, "14:00", "Europe/London")!;
+
+  // Five DIFFERENT customers, which is what this section has always claimed to
+  // test. It previously raced one customer against itself — which proved
+  // nothing about contention, and quietly asserted that a customer may not hold
+  // a slot it already holds. That turned out to be a real bug, not a rule.
+  const rivals: { id: string }[] = [];
+  for (let i = 0; i < 5; i++) {
+    const phone = `+4479000000${10 + i}`;
+    rivals.push(
+      (await adminDb.customer.findFirst({ where: { tenantId: t, phone } })) ??
+        (await adminDb.customer.create({
+          data: { tenantId: t, phone, name: `Racer ${i + 1}` },
+        })),
+    );
+  }
+
   const attempts = await Promise.allSettled(
-    Array.from({ length: 5 }, () =>
+    rivals.map((r) =>
       withTenant(t, (db) =>
         holdSlot(db, {
           tenantId: t,
-          customerId: customer.id,
+          customerId: r.id,
           serviceId: session.id,
           locationId: london.id,
           startsAt: raceStart,
@@ -281,6 +297,44 @@ async function main() {
     losers.length > 0 && losers.every((e) => isCadenceError(e) && e.code === "slot_unavailable"),
     losers.map((e) => (isCadenceError(e) ? e.code : String(e).slice(0, 60))).join(" | "),
   );
+
+  // ─────────────────────────────────────────────────────────────────────
+  //
+  // A live WhatsApp booking went: assistant holds 12:30 → customer says yes →
+  // assistant re-checks, finds 12:30 taken BY ITS OWN HOLD, announces the slot
+  // has gone, and offers 12:00. Then repeats the whole mistake at 12:00 before
+  // booking 1:00, which nobody had asked for. Two slots reported lost that were
+  // never taken by anyone.
+  console.log("\n9b. Holding a slot you already hold is not a collision");
+  const winner9 = (won[0] as PromiseFulfilledResult<Awaited<ReturnType<typeof holdSlot>>>).value;
+  const holder = await adminDb.booking.findUniqueOrThrow({
+    where: { id: winner9.bookingId },
+    select: { customerId: true },
+  });
+
+  const rehold = await withTenant(t, (db) =>
+    holdSlot(db, {
+      tenantId: t,
+      customerId: holder.customerId,
+      serviceId: session.id,
+      locationId: london.id,
+      startsAt: raceStart,
+    }),
+  );
+  check(
+    "the same customer gets their existing hold back, not slot_unavailable",
+    rehold.bookingId === winner9.bookingId,
+    `${rehold.bookingId} vs ${winner9.bookingId}`,
+  );
+  check(
+    "and the hold window is extended, not left to lapse mid-conversation",
+    rehold.expiresAt.getTime() >= winner9.expiresAt.getTime(),
+  );
+
+  const stillOne = await adminDb.booking.count({
+    where: { tenantId: t, startsAt: raceStart, status: "held" },
+  });
+  check("re-holding created no second booking", stillOne === 1, `held rows: ${stillOne}`);
 
   // ─────────────────────────────────────────────────────────────────────
   console.log("\n10. Cancelling frees the slot again");

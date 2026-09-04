@@ -227,6 +227,10 @@ ${knowledgeSection(tenant.name, knowledge)}
 ## Booking
 Availability is advisory until it is held. Never tell a customer a time is theirs before \`hold_slot\` has succeeded — the slot can go to someone else while you are typing. Then: hold, tell them, and confirm only once they say yes.
 
+Once you hold a time it is yours until the hold expires. When they say yes to it, call \`confirm_booking\` with the hold you are already holding. Do not check availability again first — you are holding that slot, so it reads as taken, and telling someone a time has gone when you are the one holding it is the worst thing you can do to them.
+
+Never say a time has gone unless a tool told you so on this turn.
+
 If a hold fails, the result usually carries alternative times. Offer one in the same message rather than apologising and asking them to start again.
 
 ## What you must not do
