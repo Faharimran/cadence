@@ -74,6 +74,28 @@ model Tenant {
   /// every tenant is the mistake this replaces.
   escalationTopics String[] @default([])
 
+  /// House rules, in the owner's own words, placed in the system prompt as
+  /// their instructions. Separate from `toneNote` because tone is a small,
+  /// preset-backed "how to sound", and this is everything else they want the
+  /// assistant to know or do — the field people actually mean when they ask to
+  /// edit the prompt.
+  ///
+  /// It sits ABOVE the correctness rules and cannot remove them. Those are not
+  /// style: they are what stop a price being invented, a time being re-rendered
+  /// into the wrong timezone, or a held slot being announced as lost.
+  agentInstructions String?
+
+  /// Which model answers, and how hard it thinks. Null on both means the
+  /// platform default, so a tenant who never opens the page keeps whatever is
+  /// best today rather than being pinned to whatever was best the day they
+  /// signed up.
+  ///
+  /// Validated against lib/conversation/models.ts on write. Free text here
+  /// would let a typo 500 every conversation for one tenant and nobody else,
+  /// which is the worst blast radius there is to notice.
+  agentModel  String?
+  agentEffort String? // low | medium | high
+
   /// Which preset this tenant was created from ("clinic", "barber", …).
   /// Provenance and presentation ONLY. Nothing in the engine or the agent may
   /// branch on it, or the vertical is back in the code where it does not belong.

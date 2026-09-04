@@ -9,6 +9,7 @@ import { getSnapshot } from "@/lib/conversation/snapshot";
 import { buildTools, type ToolContext } from "@/lib/conversation/tools";
 import { loadTranscript, recordOutbound, COLLEAGUE_PREFIX } from "@/lib/conversation/thread";
 import { buildKnowledgeContext, type KnowledgeContext } from "@/lib/knowledge";
+import { resolveModel } from "@/lib/conversation/models";
 
 /**
  * The agent loop.
@@ -22,7 +23,6 @@ import { buildKnowledgeContext, type KnowledgeContext } from "@/lib/knowledge";
  * The remaining job here is a truthful system prompt and a bounded loop.
  */
 
-const MODEL = "claude-opus-5";
 const MAX_ITERATIONS = 12;
 
 export type AgentTurn = {
@@ -112,13 +112,16 @@ export async function runAgentTurn(
 
   const toolCalls: { name: string; input: unknown }[] = [];
 
+  // Both chosen by the tenant on Settings → Agent, both defaulting to whatever
+  // the platform currently considers best. Effort is the main cost lever on a
+  // channel that may carry thousands of messages a day, so it is theirs to
+  // spend — and it is omitted entirely for models that do not accept it.
+  const { model, effort } = resolveModel(tenant);
+
   const runner = anthropic().beta.messages.toolRunner({
-    model: MODEL,
+    model,
     max_tokens: 2048,
-    // `medium` rather than `high`: these are short conversational turns, and
-    // effort is the main cost lever on a channel that may carry thousands of
-    // messages a day. Raise it if booking flows start needing more steps.
-    output_config: { effort: "medium" },
+    ...(effort ? { output_config: { effort } } : {}),
     system: systemPrompt(tenant, caps.list(), knowledge, snapshot),
     tools,
     messages: transcript,
@@ -203,6 +206,7 @@ export type TenantVoice = {
   timezone: string;
   descriptor: string | null;
   toneNote: string | null;
+  agentInstructions: string | null;
   escalationTopics: string[];
 };
 
@@ -221,7 +225,11 @@ ${tenant.descriptor ? `\n## About ${tenant.name}\n${tenant.descriptor}\n` : ""}
 ${capabilities.map((c) => `- ${c}`).join("\n")}
 
 Your tools are the only things you can do. If a customer asks for something no tool covers, say so plainly and offer to have a colleague help — do not improvise a way round it.
-
+${
+    tenant.agentInstructions?.trim()
+      ? `\n## What ${tenant.name} has told you to do\nThese are the owner's own instructions. Follow them.\n\n${tenant.agentInstructions.trim()}\n`
+      : ""
+  }
 ${knowledgeSection(tenant.name, knowledge)}
 
 ## Booking

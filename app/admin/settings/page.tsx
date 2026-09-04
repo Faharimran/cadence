@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser, asTenant, can } from "@/lib/auth/guard";
-import { LocationForm, ExceptionTypeForm, VoiceForm } from "./forms";
+import { LocationForm, ExceptionTypeForm } from "./forms";
+import { resolveModel, MODELS } from "@/lib/conversation/models";
 import { Empty, PageHeader, Pill, Row, Section } from "../ui";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,8 @@ export default async function SettingsPage() {
 
   // The owner-only check moved with the WhatsApp form to its own page.
   const isManager = can(user, "manager");
+  const modelLabel =
+    MODELS.find((m) => m.id === resolveModel(tenant).model)?.label ?? "default model";
 
   return (
     <div className="flex flex-col gap-10">
@@ -32,18 +35,32 @@ export default async function SettingsPage() {
         lede={`${user.tenantName} · ${user.tenantTimezone} · ${user.tenantCurrency}`}
       />
 
-      {/* ── Voice ─────────────────────────────────────────────────── */}
-      <Section title="How the assistant speaks for you" boxed>
-        <p className="mb-4 max-w-[66ch] text-sm text-ink-2">
-          The assistant knows your services, your hours and what you&apos;ve written down — and
-          nothing else. These three fields tell it what kind of business it is answering for, how
-          to sound, and what it must never attempt on its own.
+      {/* ── The assistant ─────────────────────────────────────────── */}
+      {/* Its own page, like WhatsApp. What the assistant is told is the setting
+          most worth reading carefully and least suited to being one box among
+          nine — and the page shows the assembled prompt in full, which needs
+          the room. */}
+      <Section title="The assistant" boxed>
+        <div className="flex flex-wrap items-center gap-3">
+          <Pill>{modelLabel}</Pill>
+          {tenant.agentInstructions ? (
+            <Pill tone="ok">your instructions are in use</Pill>
+          ) : (
+            <Pill tone="warn">no instructions written yet</Pill>
+          )}
+        </div>
+
+        <p className="mt-3 max-w-[66ch] text-sm text-ink-2">
+          What it is allowed to say, how it should sound, the house rules it follows, and which
+          model answers. You can also read the complete brief it works from.
         </p>
-        {isManager ? (
-          <VoiceForm tenant={tenant} />
-        ) : (
-          <Empty>Only managers and owners can change this.</Empty>
-        )}
+
+        <Link
+          href="/admin/settings/agent"
+          className="mt-4 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {tenant.agentInstructions ? "Open" : "Tell it how to work"}
+        </Link>
       </Section>
 
       {/* ── Locations ─────────────────────────────────────────────── */}

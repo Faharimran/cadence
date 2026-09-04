@@ -5,6 +5,7 @@ import { z } from "zod";
 import { asTenant, requireRole } from "@/lib/auth/guard";
 import { assertValidTimezone } from "@/lib/engine/time";
 import { encrypt } from "@/lib/crypto";
+import { isKnownModel, isKnownEffort } from "@/lib/conversation/models";
 
 export type SettingsFormState = { error?: string; ok?: string } | null;
 
@@ -61,6 +62,69 @@ export async function saveVoice(
     });
 
     revalidatePath("/admin/settings");
+    revalidatePath("/admin/settings/agent");
+    return { ok: "Saved. It applies to the next message a customer sends." };
+  });
+}
+
+/**
+ * Everything else about how the assistant behaves.
+ *
+ * `agentInstructions` is the field owners mean when they ask to edit the prompt.
+ * It goes high in the system prompt under a heading naming them as its author —
+ * but ABOVE the correctness rules, deliberately, so a house rule and a safety
+ * rule in conflict resolve toward the safety rule. What a tenant controls is
+ * what the assistant says and does. What they cannot remove is the short list
+ * that stops it inventing a price, re-rendering a time into the wrong timezone,
+ * or announcing a slot it is itself holding as lost.
+ *
+ * Model and effort are checked against lib/conversation/models.ts rather than
+ * taken as text. An unknown id would not fail here; it would fail later, on
+ * every message, for one tenant, which is the hardest kind of fault to notice.
+ */
+const SaveAgent = z.object({
+  agentInstructions: z.string().max(8000),
+  agentModel: z.string().refine(isKnownModel, "That is not a model we offer."),
+  agentEffort: z.string().refine(isKnownEffort, "Choose how carefully it should think."),
+});
+
+export async function saveAgent(
+  _previous: SettingsFormState,
+  formData: FormData,
+): Promise<SettingsFormState> {
+  const user = await requireRole("manager");
+
+  const parsed = SaveAgent.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+
+  return asTenant(user, async (db) => {
+    await db.tenant.update({
+      where: { id: user.tenantId },
+      data: {
+        agentInstructions: parsed.data.agentInstructions.trim() || null,
+        agentModel: parsed.data.agentModel,
+        agentEffort: parsed.data.agentEffort,
+      },
+    });
+
+    // Recorded because this is the setting most able to change what customers
+    // are told, and "who widened what the assistant may say, and when" is a
+    // question that only gets asked after something has already gone wrong.
+    await db.auditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actor: `user:${user.id}`,
+        action: "tenant.agent_updated",
+        subject: `Tenant:${user.tenantId}`,
+        after: {
+          model: parsed.data.agentModel,
+          effort: parsed.data.agentEffort,
+          instructionChars: parsed.data.agentInstructions.trim().length,
+        },
+      },
+    });
+
+    revalidatePath("/admin/settings/agent");
     return { ok: "Saved. It applies to the next message a customer sends." };
   });
 }
