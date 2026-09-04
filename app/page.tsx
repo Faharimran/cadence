@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { currentUser } from "@/lib/auth/guard";
 import { env } from "@/lib/env";
-import { PRESETS } from "@/lib/presets";
+import { PRESETS, findPreset } from "@/lib/presets";
+import { DEMO_PERSONAS } from "@/lib/demo/personas";
+import { INDUSTRIES, NOT_FOR } from "@/lib/marketing/industries";
+import { isAgentConfigured } from "@/lib/conversation/agent";
+import DemoChat from "./DemoChat";
+import Industries from "./Industries";
 
 /**
  * The public page.
@@ -28,6 +33,30 @@ export default async function Home() {
       <Hero signedIn={Boolean(user)} />
       <Trades />
       <WhatItDoes />
+      {/* Straight after the three claims, so the first thing a visitor does
+          with "it answers, it books, it hands over" is test it. The personas
+          are passed as plain data — the component is a client component and
+          must not pull the seed shape (or `Capability`) into the bundle. */}
+      <DemoChat
+        configured={isAgentConfigured()}
+        personas={DEMO_PERSONAS.map((p) => ({
+          id: p.id,
+          tab: p.tab,
+          trade: p.trade,
+          blurb: p.blurb,
+          starters: p.starters,
+          businessName: p.businessName,
+        }))}
+      />
+      {/* Preset labels resolved here rather than in the client component, so
+          PRESETS — and the Capability type it carries — stays server-side. */}
+      <Industries
+        notFor={NOT_FOR}
+        industries={INDUSTRIES.map((industry) => ({
+          ...industry,
+          presetLabel: findPreset(industry.presetId)?.label ?? "Something else",
+        }))}
+      />
       <Approval />
       <Availability />
       <Numbers />
@@ -187,13 +216,19 @@ function Nav({ signedIn }: { signedIn: boolean }) {
         <a href="#how" className="text-[13px] text-on-deep-2 transition-colors hover:text-on-deep">
           How it works
         </a>
+        <a href="#demo" className="text-[13px] text-on-deep-2 transition-colors hover:text-on-deep">
+          Try it
+        </a>
         <a
           href="#approval"
           className="text-[13px] text-on-deep-2 transition-colors hover:text-on-deep"
         >
           Approval
         </a>
-        <a href="#who" className="text-[13px] text-on-deep-2 transition-colors hover:text-on-deep">
+        <a
+          href="#industries"
+          className="text-[13px] text-on-deep-2 transition-colors hover:text-on-deep"
+        >
           Who it&apos;s for
         </a>
       </div>
@@ -585,7 +620,10 @@ function Numbers() {
   const statLabel = `${eyebrow} flex min-h-[2.6em] items-start leading-[1.3]`;
 
   return (
-    <section id="who" className="bg-m-paper pb-24">
+    // The "Who it's for" nav link used to land here, on four engineering
+    // numbers, which answered a question nobody had asked yet. It now points at
+    // the industries section, where that question is actually addressed.
+    <section className="bg-m-paper pb-24">
       <div className="mx-auto max-w-6xl px-6">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {/* The one number worth staring at gets the loud colour. */}

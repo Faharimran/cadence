@@ -48,6 +48,8 @@ const TENANT_SCOPED_TABLES = [
   "KnowledgeDoc",
   "KnowledgeRevision",
   "KnowledgeSource",
+  "SheetLink",
+  "ImportRun",
   "ChannelAccount",
   "IdempotencyRecord",
   "WebhookEndpoint",

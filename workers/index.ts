@@ -13,6 +13,7 @@ import {
 } from "@/lib/queue";
 import { ingestSource, takeUpload } from "@/lib/knowledge/ingest";
 import { runAgentTurn, isAgentConfigured } from "@/lib/conversation/agent";
+import { syncLink } from "@/lib/imports";
 import { expireStaleHolds } from "@/lib/engine/booking";
 import { sendText, splitForDelivery } from "@/lib/channels/whatsapp";
 import { attemptDelivery, dueDeliveries } from "@/lib/webhooks/deliver";
@@ -29,6 +30,7 @@ import { attemptDelivery, dueDeliveries } from "@/lib/webhooks/deliver";
 
 const HOLD_SWEEP_INTERVAL_MS = 60_000;
 const WEBHOOK_DRAIN_INTERVAL_MS = 5_000;
+const SHEET_SYNC_INTERVAL_MS = 15 * 60_000;
 
 const connection = createQueueConnection();
 
@@ -248,10 +250,52 @@ async function drainWebhooks() {
   }
 }
 
+/**
+ * Re-reads every linked spreadsheet, so the sheet stays the source of truth.
+ *
+ * Fifteen minutes because these are price lists and staff rosters, not order
+ * books: an owner who corrects a price expects it to matter today, not within
+ * the minute, and each pass fetches a whole sheet per link.
+ *
+ * A link that fails is marked `error` by syncLink and then keeps being retried.
+ * That is deliberate — the overwhelmingly common failure is a sheet whose
+ * sharing was changed, which is fixed in Google rather than here, and a link
+ * that gave up would need someone to notice and press a button they do not know
+ * about. Retrying means fixing the sharing is the whole fix.
+ */
+async function syncSheetLinks() {
+  try {
+    const links = await adminDb.sheetLink.findMany({
+      where: { status: { in: ["active", "error"] }, tenant: { status: "active" } },
+      select: { id: true, tenantId: true },
+    });
+    if (links.length === 0) return;
+
+    let ok = 0;
+    let failed = 0;
+    for (const link of links) {
+      // Sequential, not parallel. These are outbound fetches to Google against
+      // one shared IP, and a hundred at once is how a quiet integration becomes
+      // rate-limited for every tenant at the same moment.
+      const result = await withTenant(link.tenantId, (db) =>
+        syncLink(db, { tenantId: link.tenantId, linkId: link.id, trigger: "scheduled" }),
+      );
+      result.ok ? ok++ : failed++;
+    }
+    logger.info("sheet sync", { links: links.length, ok, failed });
+  } catch (err) {
+    logger.error("sheet sync pass failed", {
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 const sweepTimer = setInterval(sweepExpiredHolds, HOLD_SWEEP_INTERVAL_MS);
 const webhookTimer = setInterval(drainWebhooks, WEBHOOK_DRAIN_INTERVAL_MS);
+const sheetTimer = setInterval(syncSheetLinks, SHEET_SYNC_INTERVAL_MS);
 void sweepExpiredHolds();
 void drainWebhooks();
+void syncSheetLinks();
 
 logger.info("worker started", {
   queues: [AGENT_TURN_QUEUE, INGEST_QUEUE, "webhook-outbox"],
@@ -262,6 +306,7 @@ async function shutdown(signal: string) {
   logger.info(`worker shutting down (${signal})`);
   clearInterval(sweepTimer);
   clearInterval(webhookTimer);
+  clearInterval(sheetTimer);
   // Closing the worker waits for in-flight jobs, so a turn mid-conversation
   // finishes and the customer is not left hanging.
   await agentWorker.close();

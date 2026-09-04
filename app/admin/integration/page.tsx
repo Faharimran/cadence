@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireUser, asTenant, can } from "@/lib/auth/guard";
 import { describeInstant } from "@/lib/engine/time";
 import { EVENTS } from "@/lib/events";
@@ -61,6 +62,26 @@ export default async function IntegrationPage() {
           job for whoever looks after that software, not for the front desk.
         </p>
       </section>
+
+      {/* Deliberately ABOVE the developer fold, not inside it.
+          The two directions on this page have different audiences: keeping a CRM
+          in step is a job for whoever maintains it, whereas "I already have all
+          this in a spreadsheet" is the owner, on their first afternoon — and it
+          is the one most of them actually need. */}
+      <Section title="Already have this in a spreadsheet?" boxed>
+        <p className="max-w-[68ch] text-sm text-ink-2">
+          If your services and prices live in a Google Sheet — or in Zoho, Zenoti, Fresha or a till
+          system that can export one — point cadence at it instead of retyping. It reads the sheet,
+          works out which column is which, and keeps following it, so the copy you already edit
+          stays the real one.
+        </p>
+        <Link
+          href="/admin/integration/imports"
+          className="mt-4 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          Bring in what you already have
+        </Link>
+      </Section>
 
       {!isOwner && <Empty>Only the owner can change these.</Empty>}
 

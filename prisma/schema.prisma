@@ -121,6 +121,8 @@ model Tenant {
   auditLogs        AuditLog[]
   knowledgeDocs    KnowledgeDoc[]
   knowledgeSources KnowledgeSource[]
+  sheetLinks       SheetLink[]
+  importRuns       ImportRun[]
 
   @@index([status])
 }
@@ -1134,4 +1136,110 @@ model AuditLog {
 
   @@index([tenantId, createdAt])
   @@index([subject])
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Importing from whatever the business used before
+// ══════════════════════════════════════════════════════════════════════
+
+/**
+ * A spreadsheet the business keeps, which cadence re-reads on a schedule.
+ * The premise is that the sheet stays THEIRS. A salon that has priced its
+ * services in the same spreadsheet for six years is not going to retype it here
+ * and then maintain two copies; whichever copy is easier to edit becomes the
+ * real one, and it will not be ours. So the sheet remains the source of truth
+ * and cadence follows it.
+ * Nothing here is Google-specific except how the URL is resolved. Any source
+ * that can produce rows and columns — an Excel export, a Zoho or Zenoti CSV —
+ * lands in the same pipeline, which is the point: businesses arrive from
+ * software we have never heard of, and all of it exports a table.
+ */
+model SheetLink {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// What the person pasted, kept verbatim so the UI can show them their own
+  /// link rather than a normalised one they will not recognise.
+  sourceUrl String
+  /// The resolved CSV endpoint we actually fetch. Derived, cached, and re-derived
+  /// whenever sourceUrl changes.
+  fetchUrl  String
+  /// Which tab. Google calls it a gid; null means the first sheet.
+  gid       String?
+
+  /// Which of our tables this sheet feeds. Deliberately one kind per link: a
+  /// sheet holding services and customers in the same tab is a sheet the owner
+  /// should split, and guessing per-row is how an import writes a price into a
+  /// phone number field.
+  kind String // services | customers
+
+  /// Column header → our field name, as agreed with the owner. Stored so a
+  /// scheduled re-read never depends on a model call, and so the mapping cannot
+  /// silently change under them between two syncs.
+  mapping Json
+
+  /// Whether rows that disappear from the sheet should be deactivated here.
+  ///
+  /// Off by default, and it stays off unless someone deliberately turns it on.
+  /// A sheet that fails to load half its rows, or an owner filtering a view,
+  /// would otherwise retire a whole price list — and unlike a bad value, an
+  /// absent row gives nothing to notice.
+  removeMissing Boolean @default(false)
+
+  status    String  @default("active") // active | paused | error
+  lastError String?
+
+  lastSyncAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  runs ImportRun[]
+
+  @@index([tenantId, status])
+}
+
+/**
+ * One pass over one sheet, and everything needed to take it back.
+ * `undo` is why this model exists. Imports here apply immediately rather than
+ * waiting for approval, which is only defensible if undoing is one click and
+ * genuinely complete — so every run records the prior value of each field it
+ * changed and the ids of everything it created, before it changes anything.
+ * Kept even for runs that changed nothing: "it ran and did nothing" and "it
+ * never ran" look identical afterwards and need different responses.
+ */
+model ImportRun {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  linkId String
+  link   SheetLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  /// scheduled | manual — a sync someone watched and one that happened at 3am
+  /// are read differently when something has gone wrong.
+  trigger String @default("manual")
+
+  status String @default("ok") // ok | failed | reverted
+
+  rowsRead Int @default(0)
+  created  Int @default(0)
+  updated  Int @default(0)
+  skipped  Int @default(0)
+
+  /// Per-row complaints, kept as data rather than a log line, because the person
+  /// who needs them is looking at a screen and the fix is in their spreadsheet.
+  issues Json?
+
+  /// Prior state of everything this run touched. See revert().
+  undo Json?
+
+  error String?
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime? @db.Timestamptz(3)
+  revertedAt DateTime? @db.Timestamptz(3)
+
+  @@index([tenantId, startedAt])
+  @@index([linkId, startedAt])
 }
