@@ -866,6 +866,13 @@ model ConversationMessage {
   externalId String? // channel-side message id, for delivery receipts
   status     String? // sent | delivered | read | failed
 
+  /// Why a failed message failed, in words an owner can act on.
+  ///
+  /// "Not delivered" on its own sends someone to us, or to nobody. The reason is
+  /// almost always an expired access token, which they can fix themselves in
+  /// two minutes — but only if something tells them that is what happened.
+  failureReason String?
+
   createdAt DateTime @default(now())
 
   @@index([conversationId, createdAt])

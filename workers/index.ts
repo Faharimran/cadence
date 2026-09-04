@@ -179,9 +179,14 @@ async function deliverWhatsApp(args: {
     if (!result.ok) {
       // Mark the reply as failed rather than pretending it landed — a customer
       // waiting on a confirmation that never arrived needs a human to notice.
+      //
+      // Stored WITH the reason. "Not delivered" on its own tells an owner that
+      // something is wrong and nothing about what, so it reaches us or nobody;
+      // the usual cause is an expired access token, which they can fix
+      // themselves in two minutes once told that is what happened.
       await adminDb.conversationMessage.updateMany({
         where: { conversationId: args.conversationId, direction: "outbound", status: null },
-        data: { status: "failed" },
+        data: { status: "failed", failureReason: result.reason },
       });
       return;
     }

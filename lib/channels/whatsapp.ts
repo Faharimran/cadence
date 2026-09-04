@@ -170,7 +170,9 @@ export async function sendText(args: {
   accessToken: string;
   to: string;
   body: string;
-}): Promise<{ ok: true; messageId: string } | { ok: false; error: string }> {
+}): Promise<
+  { ok: true; messageId: string } | { ok: false; error: string; reason: string }
+> {
   const url = `https://graph.facebook.com/${GRAPH_VERSION}/${args.phoneNumberId}/messages`;
 
   try {
@@ -191,21 +193,55 @@ export async function sendText(args: {
 
     const json = (await res.json().catch(() => ({}))) as {
       messages?: { id?: string }[];
-      error?: { message?: string };
+      error?: { message?: string; code?: number };
     };
 
     if (!res.ok) {
       const error = json.error?.message ?? `HTTP ${res.status}`;
-      logger.error("whatsapp send failed", { error, to: args.to });
-      return { ok: false, error };
+      const reason = explainSendFailure(json.error?.code, res.status);
+      // Logged with the code, because "Authentication Error" alone does not say
+      // whether the token expired, the number is wrong, or we are outside the
+      // 24-hour window — three different problems with three different fixes.
+      logger.error("whatsapp send failed", {
+        error,
+        code: json.error?.code,
+        to: args.to,
+      });
+      return { ok: false, error, reason };
     }
 
     return { ok: true, messageId: json.messages?.[0]?.id ?? "" };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     logger.error("whatsapp send threw", { error });
-    return { ok: false, error };
+    return { ok: false, error, reason: "We could not reach WhatsApp at all." };
   }
+}
+
+/**
+ * Meta's error code, said the way an owner needs to hear it.
+ *
+ * This is shown next to a message a customer never received, so it has to say
+ * what to DO. "OAuthException" is not that. The three that actually occur:
+ *
+ *   190  the access token expired — routine on a test app, whose tokens last a
+ *        day, and the single most common reason replies stop arriving
+ *   100  the phone number id is wrong, usually because the WhatsApp Business
+ *        Account id beside it on the same Meta screen was pasted instead
+ *   131047  outside the 24-hour window, which is Meta policy rather than a fault
+ */
+export function explainSendFailure(code: number | undefined, status: number): string {
+  if (code === 190 || status === 401)
+    return "WhatsApp rejected our access token — it has expired or been revoked. Nothing will send until a new one is saved in Settings → WhatsApp.";
+  if (code === 100)
+    return "WhatsApp does not recognise the phone number ID saved in Settings → WhatsApp.";
+  if (code === 131047)
+    return "More than 24 hours have passed since this customer last messaged you, and WhatsApp only allows free-form replies inside that window. They will receive your reply if they message again.";
+  if (code === 131026)
+    return "WhatsApp could not deliver to this number — it may not be a WhatsApp account.";
+  if (code === 130429 || status === 429)
+    return "WhatsApp is rate-limiting us. This usually clears on its own.";
+  return "WhatsApp refused to send this message.";
 }
 
 /** WhatsApp's hard limit on a text body. Longer messages are rejected outright. */

@@ -133,6 +133,24 @@ export default async function ConversationPage({
                 )}
                 {m.sources.length > 0 && <span> · read {m.sources.join(", ")}</span>}
               </span>
+
+              {/* Why it failed, next to the message that failed.
+                  "Not delivered" alone tells someone that something is wrong
+                  and nothing about what, so it reaches us or nobody. The usual
+                  cause is an expired access token, which they can fix
+                  themselves once told that is what happened. */}
+              {m.status === "failed" && m.failureReason && (
+                <p
+                  className="max-w-[60ch] rounded-xl border px-3 py-2 text-[12px] leading-relaxed"
+                  style={{
+                    borderColor: "color-mix(in srgb, var(--bad) 35%, transparent)",
+                    background: "color-mix(in srgb, var(--bad) 8%, transparent)",
+                    color: "var(--bad)",
+                  }}
+                >
+                  {m.failureReason}
+                </p>
+              )}
             </li>
           );
         })}

@@ -3,8 +3,10 @@ import { createHmac } from "node:crypto";
 import { requireUser, asTenant, can } from "@/lib/auth/guard";
 import { decrypt } from "@/lib/crypto";
 import { env } from "@/lib/env";
+import { describeInstant } from "@/lib/engine/time";
 import { WhatsAppForm } from "../forms";
 import { CopyBox } from "./CopyBox";
+import { TestConnection } from "./TestConnection";
 import { Empty, PageHeader, Pill, Section } from "../../ui";
 
 export const dynamic = "force-dynamic";
@@ -31,9 +33,33 @@ export const dynamic = "force-dynamic";
 export default async function WhatsAppGuidePage() {
   const user = await requireUser();
 
-  const channel = await asTenant(user, (db) =>
-    db.channelAccount.findFirst({ where: { tenantId: user.tenantId, channel: "whatsapp" } }),
-  );
+  // The most recent send failure, if there is one worth mentioning.
+  //
+  // Until this existed, an expired access token presented as customers simply
+  // not being answered: the assistant wrote a perfectly good reply, Meta refused
+  // it, and the only record was a line in the server log. Nobody was going to
+  // read that. Whoever runs the business is the person who can fix it, and this
+  // is the page they would fix it on.
+  const { channel, recentFailure } = await asTenant(user, async (db) => {
+    const channel = await db.channelAccount.findFirst({
+      where: { tenantId: user.tenantId, channel: "whatsapp" },
+    });
+    const recentFailure = await db.conversationMessage.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        direction: "outbound",
+        status: "failed",
+        failureReason: { not: null },
+        // A week, not all time. A failure from three months ago that was fixed
+        // the same day is not news, and a banner that is always on is a banner
+        // nobody reads.
+        createdAt: { gt: new Date(Date.now() - 7 * 24 * 3600 * 1000) },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { failureReason: true, createdAt: true },
+    });
+    return { channel, recentFailure };
+  });
 
   const base = env.CADENCE_BASE_URL.replace(/\/$/, "");
   const callbackUrl = `${base}/api/webhooks/whatsapp`;
@@ -57,6 +83,7 @@ export default async function WhatsAppGuidePage() {
 
   const connected = Boolean(channel?.accessToken && channel.active);
   const isOwner = can(user, "owner");
+  const isManager = can(user, "manager");
 
   /**
    * The saved verify token, shown back to the owner.
@@ -107,6 +134,27 @@ export default async function WhatsAppGuidePage() {
           )}
         </div>
       </div>
+
+      {/* Above everything, including the setup guide. Someone arriving here
+          because their customers stopped getting replies needs the reason
+          first, not fifteen minutes of instructions they already followed. */}
+      {recentFailure && (
+        <div
+          className="rounded-2xl border p-5"
+          style={{
+            borderColor: "color-mix(in srgb, var(--bad) 40%, transparent)",
+            background: "color-mix(in srgb, var(--bad) 7%, transparent)",
+          }}
+        >
+          <p className="text-sm font-semibold" style={{ color: "var(--bad)" }}>
+            A reply to a customer could not be sent
+          </p>
+          <p className="mt-2 max-w-[70ch] text-sm text-ink-2">{recentFailure.failureReason}</p>
+          <p className="mt-2 font-mono text-[11px] text-ink-3">
+            most recently {describeInstant(recentFailure.createdAt, user.tenantTimezone)}
+          </p>
+        </div>
+      )}
 
       {looksLocal && (
         <div
@@ -336,6 +384,19 @@ export default async function WhatsAppGuidePage() {
           </Empty>
         )}
       </Section>
+
+      {/* ── Is it actually working right now ───────────────────────── */}
+      {channel?.accessToken && isManager && (
+        <Section title="Check it still works" boxed>
+          <p className="mb-4 max-w-[72ch] text-sm text-ink-2">
+            Access tokens expire — Meta&apos;s test tokens last only a day. When one does, the
+            assistant carries on writing replies and WhatsApp quietly refuses to deliver them, so
+            the first sign is usually a customer saying they never heard back. This asks WhatsApp
+            directly instead of waiting to find out.
+          </p>
+          <TestConnection />
+        </Section>
+      )}
 
       {/* ── When it goes wrong ─────────────────────────────────────── */}
       <Section title="If something is not working">

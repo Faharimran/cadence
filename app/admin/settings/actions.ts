@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { asTenant, requireRole } from "@/lib/auth/guard";
 import { assertValidTimezone } from "@/lib/engine/time";
-import { encrypt } from "@/lib/crypto";
+import { encrypt, decrypt } from "@/lib/crypto";
 import { isKnownModel, isKnownEffort } from "@/lib/conversation/models";
+import { explainSendFailure } from "@/lib/channels/whatsapp";
 
 export type SettingsFormState = { error?: string; ok?: string } | null;
 
@@ -332,5 +333,57 @@ export async function saveWhatsAppAccount(
 
     revalidatePath("/admin/settings");
     return { ok: "Saved." };
+  });
+}
+
+/**
+ * Asks Meta whether the saved credentials still work. Sends no message.
+ *
+ * The failure this exists for is silent by construction: Meta's test-app access
+ * tokens expire a day after they are issued, and the only symptom is customers
+ * not being answered. The assistant keeps writing good replies; Meta keeps
+ * refusing them; the server log is the only place it shows. Nobody running a
+ * business is reading the server log.
+ *
+ * So there is a button. It answers the two questions in order — is the token
+ * still good, and is the phone number id the right one — and says what to do
+ * about each, in the words used on the rest of this page.
+ */
+export async function testWhatsAppConnection(): Promise<SettingsFormState> {
+  const user = await requireRole("manager");
+
+  return asTenant(user, async (db) => {
+    const account = await db.channelAccount.findFirst({
+      where: { tenantId: user.tenantId, channel: "whatsapp" },
+    });
+
+    if (!account?.accessToken) {
+      return { error: "No access token has been saved yet, so nothing can be sent." };
+    }
+
+    let res: Response;
+    try {
+      res = await fetch(
+        `https://graph.facebook.com/v21.0/${account.externalAccountId}` +
+          `?fields=display_phone_number,verified_name`,
+        { headers: { Authorization: `Bearer ${decrypt(account.accessToken)}` } },
+      );
+    } catch {
+      return { error: "We could not reach WhatsApp just now. Try again in a moment." };
+    }
+
+    const body = (await res.json().catch(() => ({}))) as {
+      display_phone_number?: string;
+      verified_name?: string;
+      error?: { code?: number };
+    };
+
+    if (res.status === 200) {
+      return {
+        ok: `Working. WhatsApp knows this number as ${body.verified_name} · ${body.display_phone_number}.`,
+      };
+    }
+
+    return { error: explainSendFailure(body.error?.code, res.status) };
   });
 }
