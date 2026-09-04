@@ -27,6 +27,16 @@ const ROLE = "cadence_app";
 
 async function main() {
   const password = process.argv[2] ?? process.env.CADENCE_APP_DB_PASSWORD;
+
+  // Whether a human is watching, which decides whether the finished connection
+  // string may be printed.
+  //
+  // It is useful on a terminal — it saves assembling the URL by hand and
+  // getting it subtly wrong. It is a leak on a deploy: this runs inside
+  // `npm start` on every boot, and Railway keeps build logs, so printing the
+  // password there writes the application's database credentials into a record
+  // that outlives the deploy and is visible to everyone with project access.
+  const interactive = Boolean(process.argv[2]);
   if (!password) {
     console.error("Usage: npm run db:approle -- <password>");
     console.error("   or: CADENCE_APP_DB_PASSWORD=… npm run db:approle");
@@ -82,11 +92,15 @@ async function main() {
     );
     console.log("✓ granted connect, schema usage and sequences");
 
-    const appUrl = new URL(ownerUrl);
-    appUrl.username = ROLE;
-    appUrl.password = password;
-    console.log(`\nSet this as DATABASE_APP_URL:\n\n${appUrl.toString()}\n`);
-    console.log("Then run: npm run db:rls");
+    if (interactive) {
+      const appUrl = new URL(ownerUrl);
+      appUrl.username = ROLE;
+      appUrl.password = password;
+      console.log(`\nSet this as DATABASE_APP_URL:\n\n${appUrl.toString()}\n`);
+      console.log("Then run: npm run db:rls");
+    } else {
+      console.log(`· ${ROLE} ready (connection string not printed — this is a deploy log)`);
+    }
   } finally {
     await prisma.$disconnect();
   }
