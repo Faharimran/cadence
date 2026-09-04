@@ -257,6 +257,196 @@ export const SERVICE_FIELDS: FieldSpec[] = [
   },
 ];
 
+/**
+ * A time of day, as written on a rota.
+ *
+ * "9", "9am", "09:00", "9.30", "5pm" and "17:00" all appear, frequently in the
+ * same column of the same sheet.
+ */
+function parseTimeOfDay(raw: string): { minutes: number; explicitMeridiem: boolean } | null {
+  const t = raw.trim().toLowerCase().replace(/\s+/g, "");
+  const m = t.match(/^(\d{1,2})(?:[:.](\d{2}))?(am|pm)?$/);
+  if (!m) return null;
+
+  let hour = Number(m[1]);
+  const min = m[2] ? Number(m[2]) : 0;
+  const meridiem = m[3];
+
+  if (min > 59) return null;
+  if (meridiem) {
+    if (hour < 1 || hour > 12) return null;
+    if (meridiem === "pm" && hour !== 12) hour += 12;
+    if (meridiem === "am" && hour === 12) hour = 0;
+  } else if (hour > 24) return null;
+
+  const minutes = hour * 60 + min;
+  if (minutes > 24 * 60) return null;
+  return { minutes, explicitMeridiem: Boolean(meridiem) };
+}
+
+const hhmm = (minutes: number) =>
+  `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+
+const CLOSED = new Set(["off", "closed", "x", "-", "—", "rest", "holiday", "leave", "none", "no"]);
+
+export type Shift = { startTime: string; endTime: string };
+
+/**
+ * One cell of a weekly rota: "9-5", "10:00-18:00", "off", or a split shift.
+ *
+ * Split shifts — "9-1, 2-6" — are normal wherever the business closes for lunch,
+ * and reading one as a single 9-to-6 block would offer appointments during the
+ * hour nobody is there. They become two rules.
+ *
+ * The 12-hour inference is the load-bearing bit. "9-5" is universally understood
+ * to mean nine in the morning to five in the afternoon, and read literally it is
+ * an eight-hour day ending before it starts. So an end earlier than its start,
+ * with no am/pm written, gains twelve hours. Anything still inverted after that
+ * is refused rather than guessed — an overnight shift is real but rare here, and
+ * silently inventing one would open a business at three in the morning.
+ */
+export function parseShifts(raw: string): Parsed<Shift[]> {
+  const t = raw.trim();
+  if (isBlank(t) || CLOSED.has(t.toLowerCase())) return { ok: true, value: [] };
+
+  const shifts: Shift[] = [];
+
+  // How far through the day we have already got. A cell is read left to right
+  // as one day moving forwards, which is what makes "9-1, 2-6" work: read alone,
+  // "2-6" is two in the MORNING, and only the 9-to-1 before it says otherwise.
+  // Getting this wrong opened the salon at two in the morning and closed it
+  // before anybody arrived.
+  let cursor = 0;
+
+  // Split on commas, semicolons, "&" and the word "and".
+  for (const piece of t.split(/\s*(?:,|;|&|\band\b)\s*/i)) {
+    if (!piece.trim()) continue;
+
+    // Accept -, –, —, "to" as the separator.
+    const parts = piece.split(/\s*(?:-|–|—|\bto\b)\s*/i).filter(Boolean);
+    if (parts.length !== 2) {
+      return { ok: false, why: `“${raw}” is not a pair of times — write it like “9-5” or “off”.` };
+    }
+
+    const from = parseTimeOfDay(parts[0]);
+    const to = parseTimeOfDay(parts[1]);
+    if (!from || !to) {
+      return { ok: false, why: `“${raw}” is not a pair of times — write it like “9-5” or “off”.` };
+    }
+
+    let start = from.minutes;
+    if (start < cursor && !from.explicitMeridiem && start + 12 * 60 <= 24 * 60) {
+      start += 12 * 60;
+    }
+
+    let end = to.minutes;
+    if (end <= start && !to.explicitMeridiem && end + 12 * 60 <= 24 * 60) {
+      end += 12 * 60;
+    }
+    if (end <= start) {
+      return {
+        ok: false,
+        why: `“${raw}” finishes before it starts. Overnight shifts are not supported yet.`,
+      };
+    }
+
+    shifts.push({ startTime: hhmm(start), endTime: hhmm(end) });
+    cursor = end;
+  }
+
+  // Overlapping halves of a split shift would generate two rules covering the
+  // same hour, which doubles nothing useful and confuses the availability grid.
+  const sorted = [...shifts].sort((a, b) => a.startTime.localeCompare(b.startTime));
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].startTime < sorted[i - 1].endTime) {
+      return { ok: false, why: `“${raw}” has two shifts that overlap.` };
+    }
+  }
+
+  return { ok: true, value: shifts };
+}
+
+/** A comma-separated list, used for the open vocabulary of resource tags. */
+export function parseTags(raw: string): Parsed<string[]> {
+  const t = raw.trim();
+  if (isBlank(t)) return { ok: true, value: [] };
+  const tags = t
+    .split(/\s*[,;/]\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+  return { ok: true, value: tags };
+}
+
+const WEEKDAYS = [
+  ["hoursSun", "Sunday", 0],
+  ["hoursMon", "Monday", 1],
+  ["hoursTue", "Tuesday", 2],
+  ["hoursWed", "Wednesday", 3],
+  ["hoursThu", "Thursday", 4],
+  ["hoursFri", "Friday", 5],
+  ["hoursSat", "Saturday", 6],
+] as const;
+
+/** field key → weekday number, for the seven rota columns. */
+export const WEEKDAY_OF_FIELD = new Map<string, number>(
+  WEEKDAYS.map(([key, , n]) => [key, n as number]),
+);
+
+/**
+ * Staff and rooms, with their week.
+ *
+ * Modelled as one row per person and one column per day, because that is how a
+ * rota is actually written on the sheet taped to the back office wall. The
+ * alternative — a row per person per weekday — is tidier and nobody keeps it
+ * that way.
+ */
+export const STAFF_FIELDS: FieldSpec[] = [
+  {
+    key: "name",
+    label: "Name",
+    hint: "The person or room — “Priya”, “Chair 2”, “Treatment room”.",
+    required: true,
+    parse: (raw) => text(200, true)(raw),
+  },
+  {
+    key: "tags",
+    label: "What they can do",
+    hint: "Comma-separated skills or types that match your services — “Hair, Colour”. Optional.",
+    parse: (raw) => parseTags(raw),
+  },
+  {
+    key: "locationName",
+    label: "Which location",
+    hint: "The branch name, matched to your locations. Leave unmapped if you have only one.",
+    parse: (raw) => text(120)(raw),
+  },
+  ...WEEKDAYS.map(([key, day]) => ({
+    key,
+    label: `${day} hours`,
+    hint: `Working hours on ${day} — “9-5”, “10:00-18:00”, “9-1, 2-6” for a lunch break, or “off”.`,
+    parse: (raw: string) => parseShifts(raw),
+  })),
+  {
+    key: "slotMinutes",
+    label: "Appointment grid",
+    hint: "How often an appointment can start, in minutes. Defaults to 30.",
+    parse: (raw) => (isBlank(raw) ? { ok: true, value: null } : parseDuration(raw)),
+  },
+  {
+    key: "active",
+    label: "Still working here",
+    hint: "Yes or no. Blank counts as yes.",
+    parse: (raw) => parseBoolean(raw, true),
+  },
+  {
+    key: "externalId",
+    label: "Their own reference",
+    hint: "A staff id from the old system. Used to match rows on later syncs.",
+    parse: (raw) => text(120)(raw),
+  },
+];
+
 export const CUSTOMER_FIELDS: FieldSpec[] = [
   {
     key: "name",
@@ -289,6 +479,11 @@ export const KINDS = {
     label: "Services and prices",
     blurb: "What you offer, how long each takes, and what it costs.",
     fields: SERVICE_FIELDS,
+  },
+  staff: {
+    label: "Staff, rooms and their hours",
+    blurb: "Who works when — one row per person, one column per day.",
+    fields: STAFF_FIELDS,
   },
   customers: {
     label: "Customers",

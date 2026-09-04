@@ -16,7 +16,7 @@
 import { adminDb, withTenant } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { parseCsv, toRecords, resolveSheetUrl, SheetError } from "@/lib/imports/sheet";
-import { parseMoney, parseDuration, parseBoolean, minorUnitFactor } from "@/lib/imports/fields";
+import { parseMoney, parseDuration, parseBoolean, parseShifts, minorUnitFactor } from "@/lib/imports/fields";
 import { applySheet, revertRun } from "@/lib/imports/apply";
 
 let passed = 0;
@@ -306,6 +306,131 @@ async function main() {
     applySheet(db, { tenantId: t, kind: "customers", currency: "GBP", sheet: people, mapping: pmap, removeMissing: false }),
   );
   check("the same person is matched on their phone, not duplicated", again.created === 0, `created ${again.created}`);
+
+  // ── 12. The rota ────────────────────────────────────────────────────
+  console.log("\n12. Hours, as written on a rota");
+
+  const sh = (s: string) => parseShifts(s);
+  const shift1 = (s: string) => (sh(s) as { value: { startTime: string; endTime: string }[] }).value[0];
+
+  check('"9-5" is nine to five, not an inverted day', shift1("9-5")?.endTime === "17:00", JSON.stringify(sh("9-5")));
+  check('"10-6" likewise', shift1("10-6")?.endTime === "18:00");
+  check('"09:00-17:30" is taken literally', shift1("09:00-17:30")?.endTime === "17:30");
+  check('"9am-1pm" respects am/pm', shift1("9am-1pm")?.endTime === "13:00");
+  check('"11-2" gains twelve hours on the end', shift1("11-2")?.endTime === "14:00");
+  check("an en dash separates as well as a hyphen", shift1("9–5")?.endTime === "17:00");
+  check('"9 to 5" reads too', shift1("9 to 5")?.endTime === "17:00");
+
+  check('"off" is no hours, not an error', sh("off").ok && (sh("off") as { value: unknown[] }).value.length === 0);
+  check("blank is no hours", (sh("") as { value: unknown[] }).value.length === 0);
+
+  const split = sh("9-1, 2-6") as { value: { startTime: string; endTime: string }[] };
+  check("a split shift becomes two blocks", split.value.length === 2, JSON.stringify(split.value));
+  check(
+    "and the lunch hour between them is not bookable",
+    split.value[0].endTime === "13:00" && split.value[1].startTime === "14:00",
+    JSON.stringify(split.value),
+  );
+
+  check("overlapping halves of a split shift are refused", !sh("9-2, 1-6").ok);
+  // 22:00-02:00 cannot be rescued by the twelve-hour rule, and inventing an
+  // overnight shift would open a business at three in the morning.
+  check("an overnight shift is refused rather than invented", !sh("22-2").ok);
+  check("nonsense is refused", !sh("mornings").ok);
+
+  // ── 13. Staff and their week ────────────────────────────────────────
+  console.log("\n13. Importing people and the hours they work");
+
+  const rota = toRecords(
+    parseCsv(
+      "Name,Skills,Mon,Tue,Wed,Thu,Fri,Sat,Sun\n" +
+        'Priya,"Hair, Colour",9-5,9-5,off,9-5,"9-1, 2-6",10-4,off\n' +
+        "Chair 2,Hair,9-6,9-6,9-6,9-6,9-6,off,off\n",
+    ),
+  );
+  const rmap = {
+    Name: "name",
+    Skills: "tags",
+    Mon: "hoursMon",
+    Tue: "hoursTue",
+    Wed: "hoursWed",
+    Thu: "hoursThu",
+    Fri: "hoursFri",
+    Sat: "hoursSat",
+    Sun: "hoursSun",
+  };
+
+  const staff1 = await withTenant(t, (db) =>
+    applySheet(db, { tenantId: t, kind: "staff", currency: "GBP", sheet: rota, mapping: rmap, removeMissing: false }),
+  );
+  check("both people were created", staff1.created === 2, `created ${staff1.created}`);
+
+  const priya = await adminDb.resource.findFirstOrThrow({ where: { tenantId: t, name: "Priya" } });
+  check("skills became tags", priya.tags.join(",") === "Hair,Colour", priya.tags.join(","));
+
+  const priyaRules = await adminDb.scheduleRule.findMany({
+    where: { tenantId: t, resourceId: priya.id },
+    orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
+  });
+  // Mon, Tue, Thu, Sat = 1 each; Fri = 2 (split shift). Wed and Sun are off.
+  check("one rule per shift, and none for days off", priyaRules.length === 6, `${priyaRules.length} rules`);
+  check(
+    "Wednesday has no hours at all",
+    !priyaRules.some((r) => r.weekday === 3),
+  );
+  const friday = priyaRules.filter((r) => r.weekday === 5);
+  check("Friday is two blocks around lunch", friday.length === 2, JSON.stringify(friday.map((r) => `${r.startTime}-${r.endTime}`)));
+
+  check(
+    "everyone was attached to the only location",
+    (await adminDb.resourceLocation.count({ where: { tenantId: t, resourceId: priya.id } })) === 1,
+  );
+
+  const staff2 = await withTenant(t, (db) =>
+    applySheet(db, { tenantId: t, kind: "staff", currency: "GBP", sheet: rota, mapping: rmap, removeMissing: false }),
+  );
+  check("re-running an unchanged rota changes nothing", staff2.updated === 0 && staff2.created === 0,
+    `created ${staff2.created}, updated ${staff2.updated}`);
+  check(
+    "and does not pile up duplicate rules",
+    (await adminDb.scheduleRule.count({ where: { tenantId: t, resourceId: priya.id } })) === 6,
+  );
+
+  // ── 14. A rota is replaced, not merged ──────────────────────────────
+  console.log("\n14. Changing the rota");
+
+  const newRota = toRecords(
+    parseCsv("Name,Skills,Mon,Tue,Wed,Thu,Fri,Sat,Sun\n" + 'Priya,"Hair, Colour",9-5,off,off,off,off,off,off\n'),
+  );
+  const staff3 = await withTenant(t, (db) =>
+    applySheet(db, { tenantId: t, kind: "staff", currency: "GBP", sheet: newRota, mapping: rmap, removeMissing: false }),
+  );
+  check("the change was noticed", staff3.updated === 1, `updated ${staff3.updated}`);
+  check(
+    "days removed from the sheet stop being offered",
+    (await adminDb.scheduleRule.count({ where: { tenantId: t, resourceId: priya.id } })) === 1,
+    "a merge rather than a replace would leave Tuesday behind",
+  );
+
+  const undoRota = await withTenant(t, (db) => revertRun(db, { tenantId: t, undo: staff3.undo }));
+  check("undoing puts the whole week back", undoRota.restored === 1, JSON.stringify(undoRota));
+  check(
+    "all six shifts again",
+    (await adminDb.scheduleRule.count({ where: { tenantId: t, resourceId: priya.id } })) === 6,
+  );
+
+  // ── 15. Two locations force the question ────────────────────────────
+  console.log("\n15. When there is more than one branch");
+
+  await adminDb.location.create({ data: { tenantId: t, name: "Second", timezone: "Europe/London" } });
+  const ambiguous = await withTenant(t, (db) =>
+    applySheet(db, { tenantId: t, kind: "staff", currency: "GBP", sheet: rota, mapping: rmap, removeMissing: false }),
+  );
+  check(
+    "a rota with no branch column is refused rather than guessed",
+    ambiguous.skipped === 2 && ambiguous.issues.some((i) => i.problem.includes("which one")),
+    JSON.stringify(ambiguous.issues.slice(0, 1)),
+  );
 
   // ── Clean up ────────────────────────────────────────────────────────
   await adminDb.tenant.delete({ where: { id: t } });
