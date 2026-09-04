@@ -322,6 +322,28 @@ async function main() {
     check("and hands back the same hold, not a second one", out.holdId === holdId);
   });
 
+  // Re-checking availability is the move that caused the incident, so the
+  // result must carry the hold back rather than leaving the slot merely absent.
+  await withTenant(t, async (db) => {
+    const { tools } = await makeCtx(db, t, thread.conversationId, thread.customerId);
+    const out = await call(tool(tools, "check_availability"), {
+      serviceId: session.id,
+      locationId: london.id,
+      from: from.toISOString(),
+      to: to.toISOString(),
+    });
+    const holding = out.holding ?? [];
+    check(
+      "availability tells you what you are already holding",
+      holding.some((h: { holdId: string }) => h.holdId === holdId),
+      JSON.stringify(holding).slice(0, 140),
+    );
+    check(
+      "and the held time is absent from the free slots, as it should be",
+      !(out.slots ?? []).some((s: { startsAt: string }) => s.startsAt === target.toISOString()),
+    );
+  });
+
   // Somebody else asking for it is a real collision, and must still be one.
   const rival = await withTenant(t, (db) =>
     openThread(db, {

@@ -12,12 +12,20 @@ Four things in one Railway project:
 |---|---|
 | **Postgres** | Railway plugin |
 | **Redis** | Railway plugin — the queue and the conversation snapshots |
-| **web** | this repo, `npm run start:web` |
-| **worker** | this repo again, `npm run start:worker` |
+| **web** | this repo |
+| **worker** | this repo again, with `CADENCE_ROLE=worker` |
 
-`web` and `worker` are the same code deployed twice with different start
-commands. The worker runs agent turns, reads uploaded documents and delivers
-webhooks; without it messages are received and never answered.
+`web` and `worker` are the same code deployed twice. Both run plain `npm start`;
+the `CADENCE_ROLE` variable is what makes one of them a worker. The worker runs
+agent turns, reads uploaded documents and delivers webhooks — without it,
+messages are received and never answered.
+
+**Why a variable and not two start commands.** Railway ignored the
+`startCommand` in `railway.json` — silently, with no warning and no error. The
+migration step never ran, and it surfaced days later as "credentials for
+`cadence_app` are not valid", which is not a sentence that points at a missing
+start command. `npm start` is the one entry point Railway will always use, so
+the branch lives inside it where nothing can drop it.
 
 ---
 
@@ -39,15 +47,26 @@ uses two connections: the owner for migrations, and a restricted role for
 everything the app does. `lib/env.ts` refuses to boot in production unless the
 two differ.
 
-From your machine, pointed at the Railway database:
+Pick a long random password for that restricted role now — `openssl rand -base64 32` — because two variables in the next step are built from it:
+
+- `CADENCE_APP_DB_PASSWORD` — the password on its own. Every deploy runs
+  `scripts/bootstrapAppRole.ts`, which creates the `cadence_app` role if it is
+  missing and sets this password on it. It is idempotent, so it is safe on every
+  deploy and a fresh database needs no manual step.
+- `DATABASE_APP_URL` — the Postgres connection string with the username swapped
+  to `cadence_app` and that password in it. Same host, port and database as
+  `DATABASE_URL`; only the credentials differ.
+
+The role is created `NOSUPERUSER NOBYPASSRLS`, deliberately. Either of those
+would leave every policy in place and inert.
+
+If you would rather see the URL constructed than build it by hand, run the
+script from your machine first — it prints the exact string to paste:
 
 ```bash
 DATABASE_URL="<Railway Postgres connection string>" \
-  npx tsx scripts/bootstrapAppRole.ts "<a long random password>"
+  npx tsx scripts/bootstrapAppRole.ts "<that password>"
 ```
-
-It prints the `DATABASE_APP_URL` to set. Keep the password; you will not see it
-again.
 
 ## 3. Environment variables
 
@@ -55,9 +74,10 @@ Set these on **both** services. Railway's `${{Postgres.DATABASE_URL}}` and
 `${{Redis.REDIS_URL}}` reference the plugins.
 
 ```
-DATABASE_URL          ${{Postgres.DATABASE_URL}}
-DATABASE_APP_URL      <printed by the script above>
-REDIS_URL             ${{Redis.REDIS_URL}}
+DATABASE_URL             ${{Postgres.DATABASE_URL}}
+DATABASE_APP_URL         <same URL, user cadence_app, password below>
+CADENCE_APP_DB_PASSWORD  <the password you picked in step 2>
+REDIS_URL                ${{Redis.REDIS_URL}}
 
 ANTHROPIC_API_KEY     sk-ant-…
 CADENCE_SECRET        <openssl rand -base64 48>
@@ -79,27 +99,30 @@ Two of these matter more than they look:
 
 ## 4. Migrations
 
-Set a **pre-deploy command** on the `web` service:
+Nothing to configure. `npm start` on the `web` service runs `deploy:migrate`
+before serving: `prisma migrate deploy`, then `scripts/bootstrapAppRole.ts`,
+then `scripts/applyRls.ts`.
 
-```
-npm run deploy:migrate
-```
-
-That runs `prisma migrate deploy` and then `scripts/applyRls.ts`, which applies
-the row-level-security policies, the no-double-booking exclusion constraint, and
-the knowledge full-text index. **Prisma does not know those exist**, so skipping
-the second half leaves a database that migrates cleanly and has no tenant
-isolation.
+The last of those matters more than it looks. It applies the row-level-security
+policies, the no-double-booking exclusion constraint, and the knowledge
+full-text index. **Prisma does not know any of those exist** — they are not in
+the schema and no migration creates them. A deploy that runs `migrate deploy`
+alone produces a database that migrated cleanly and has no tenant isolation
+whatsoever.
 
 ## 5. The worker
 
-New service → same repo → change the start command to:
+New service → same repo → add one variable:
 
 ```
-npm run start:worker
+CADENCE_ROLE   worker
 ```
 
-Same environment variables. No health check — it serves no HTTP.
+Everything else is identical, including the start command. No health check — it
+serves no HTTP.
+
+Leave `CADENCE_ROLE` unset on `web`. Setting it on both gives you two workers
+and no website.
 
 ## 6. First operator and first business
 

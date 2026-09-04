@@ -160,7 +160,9 @@ export function buildTools(ctx: ToolContext) {
           "When nothing is available the result explains WHY, and the reasons need different replies: " +
           "'closed' means the business is shut then (say when it reopens, do not offer to keep looking); " +
           "'fully_booked' means try another day; " +
-          "'no_matching_resource' means nobody here does this — escalate instead of retrying.",
+          "'no_matching_resource' means nobody here does this — escalate instead of retrying. " +
+          "A 'holding' list means you already hold those times: they are yours, they will not appear " +
+          "as free because you have them, and you must never tell the customer one has gone.",
         inputSchema: z.object({
           serviceId: z.string().describe("From list_services."),
           from: IsoInstant,
@@ -180,6 +182,32 @@ export function buildTools(ctx: ToolContext) {
               limit: input.limit ?? 6,
             });
 
+            // A slot this customer is already holding is correctly absent from
+            // availability — it is not free, they have it. But absent looks
+            // identical to gone, and an assistant that held 12:30 a minute ago
+            // then re-checks reads its own reservation as somebody else's and
+            // tells the customer they lost it. That happened, twice in one
+            // conversation, before it booked a third time nobody asked for.
+            //
+            // So availability never comes back without saying what you hold.
+            const yourHolds = await ctx.db.booking.findMany({
+              where: {
+                tenantId: ctx.tenantId,
+                customerId: ctx.customerId,
+                status: "held",
+                holdExpiresAt: { gt: new Date() },
+              },
+              include: { location: true },
+              orderBy: { startsAt: "asc" },
+            });
+
+            const holding = yourHolds.map((b) => ({
+              holdId: b.id,
+              startsAt: b.startsAt.toISOString(),
+              label: describeInstant(b.startsAt, b.location.timezone),
+              note: "You are holding this. It is yours — confirm_booking with this holdId.",
+            }));
+
             if (!result.available) {
               return json({
                 ok: false,
@@ -191,11 +219,13 @@ export function buildTools(ctx: ToolContext) {
                     : "Not bookable in that range."),
                 recoverable: result.reason !== "no_matching_resource",
                 ...(result.nextOpenAt ? { reopensAt: result.nextOpenAt.toISOString() } : {}),
+                ...(holding.length > 0 ? { holding } : {}),
               });
             }
 
             return json({
               ok: true,
+              ...(holding.length > 0 ? { holding } : {}),
               slots: result.slots.map((s) => ({
                 startsAt: s.startsAt.toISOString(),
                 // Pre-rendered in the LOCATION's timezone. The model must quote
