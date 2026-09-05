@@ -21,6 +21,7 @@
     "seed:demo:agents": "dotenv -e .env.local -- tsx scripts/seedDemoAgents.ts",
     "prove:demo": "dotenv -e .env.local -- tsx scripts/proveDemo.ts",
     "check:whatsapp": "tsx scripts/checkWhatsApp.ts",
+    "cost": "dotenv -e .env.local -- tsx scripts/costReport.ts",
     "try:import": "dotenv -e .env.local -- tsx scripts/tryImport.ts",
     "prove:import": "dotenv -e .env.local -- tsx scripts/proveImport.ts",
     "prove:engine": "dotenv -e .env.local -- tsx scripts/proveEngine.ts",
