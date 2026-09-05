@@ -219,6 +219,42 @@ export async function sendText(args: {
 }
 
 /**
+ * When this token dies, if Meta will say.
+ *
+ * The whole failure mode is that expiry is invisible until messages stop, so
+ * being able to say "this one runs out in three hours" the day before is worth
+ * more than any amount of documentation about it.
+ *
+ * Meta's `debug_token` normally wants an app token; passing the token as its own
+ * inspector works for the tokens that matter here and simply fails for the rest,
+ * so this returns null rather than throwing and the caller says nothing. A
+ * diagnostic that breaks the page it is diagnosing is worse than no diagnostic.
+ *
+ * `expires_at: 0` means never, which is exactly what a System User token is for.
+ */
+export async function describeTokenLifetime(
+  token: string,
+): Promise<{ neverExpires: boolean; hoursLeft: number | null } | null> {
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/${GRAPH_VERSION}/debug_token` +
+        `?input_token=${encodeURIComponent(token)}&access_token=${encodeURIComponent(token)}`,
+    );
+    if (!res.ok) return null;
+
+    const body = (await res.json()) as { data?: { expires_at?: number; is_valid?: boolean } };
+    const expiresAt = body.data?.expires_at;
+    if (expiresAt === undefined) return null;
+    if (expiresAt === 0) return { neverExpires: true, hoursLeft: null };
+
+    const hoursLeft = Math.round((expiresAt * 1000 - Date.now()) / 3_600_000);
+    return { neverExpires: false, hoursLeft };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Meta's error code, said the way an owner needs to hear it.
  *
  * This is shown next to a message a customer never received, so it has to say

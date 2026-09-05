@@ -6,7 +6,7 @@ import { asTenant, requireRole } from "@/lib/auth/guard";
 import { assertValidTimezone } from "@/lib/engine/time";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { isKnownModel, isKnownEffort } from "@/lib/conversation/models";
-import { explainSendFailure } from "@/lib/channels/whatsapp";
+import { explainSendFailure, describeTokenLifetime } from "@/lib/channels/whatsapp";
 
 export type SettingsFormState = { error?: string; ok?: string } | null;
 
@@ -379,9 +379,22 @@ export async function testWhatsAppConnection(): Promise<SettingsFormState> {
     };
 
     if (res.status === 200) {
-      return {
-        ok: `Working. WhatsApp knows this number as ${body.verified_name} · ${body.display_phone_number}.`,
-      };
+      const who = `WhatsApp knows this number as ${body.verified_name} · ${body.display_phone_number}.`;
+      const life = await describeTokenLifetime(decrypt(account.accessToken));
+
+      // Said now, while it still works, because the alternative is finding out
+      // from a customer who never got a reply.
+      if (life?.neverExpires) return { ok: `Working, and this token never expires. ${who}` };
+      if (life && life.hoursLeft !== null) {
+        return life.hoursLeft <= 24
+          ? {
+              ok:
+                `Working — but this token runs out in about ${Math.max(0, life.hoursLeft)} hours, ` +
+                `and replies stop silently when it does. ${who} See “Stop having to do this every day” below.`,
+            }
+          : { ok: `Working. This token has about ${life.hoursLeft} hours left. ${who}` };
+      }
+      return { ok: `Working. ${who}` };
     }
 
     return { error: explainSendFailure(body.error?.code, res.status) };

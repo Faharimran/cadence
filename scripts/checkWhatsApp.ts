@@ -25,6 +25,7 @@
 import { adminDb } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { decrypt } from "@/lib/crypto";
+import { describeTokenLifetime } from "@/lib/channels/whatsapp";
 
 const SLUG = process.env.CADENCE_TENANT ?? "cara-clinic";
 
@@ -83,6 +84,18 @@ async function main() {
 
   if (res.status === 200) {
     console.log(`  ✓ ${body.verified_name} · ${body.display_phone_number}`);
+
+    const life = await describeTokenLifetime(token);
+    if (life?.neverExpires) {
+      console.log(`  ✓ this token never expires — a System User token, which is the right kind`);
+    } else if (life && life.hoursLeft !== null) {
+      console.log(
+        `  ${life.hoursLeft <= 24 ? "⚠" : "·"} expires in about ${Math.max(0, life.hoursLeft)} hours` +
+          (life.hoursLeft <= 24
+            ? `\n    Replies will stop silently when it does. Settings → WhatsApp explains\n    how to get one that never expires.`
+            : ""),
+      );
+    }
     if (body.quality_rating) console.log(`  quality rating: ${body.quality_rating}`);
     if (body.platform_type) console.log(`  platform: ${body.platform_type}`);
     console.log(`\nThe token works and the phone number id is right.`);

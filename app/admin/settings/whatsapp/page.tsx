@@ -398,6 +398,101 @@ export default async function WhatsAppGuidePage() {
         </Section>
       )}
 
+      {/* ── The token that does not expire ─────────────────────────── */}
+      {/* Placed straight after the connection check, because that is where
+          someone lands the morning their replies stopped, and "do this once and
+          it never happens again" is the only thing they want to read. */}
+      {isOwner && (
+        <Section title="Stop having to do this every day" boxed>
+          <p className="max-w-[72ch] text-sm text-ink-2">
+            The token on the API Setup page is a <strong>temporary</strong> one. It lasts about
+            twenty-four hours, and when it dies your assistant keeps writing replies that WhatsApp
+            silently refuses to deliver. Nobody is told. The first sign is a customer saying they
+            never heard back.
+          </p>
+          <p className="mt-3 max-w-[72ch] text-sm text-ink-2">
+            A <strong>System User</strong> token never expires. It takes about ten minutes to set up
+            once, in a corner of Meta&apos;s settings that is genuinely hard to find, and then you
+            never think about it again.
+          </p>
+
+          <ol className="mt-6 flex flex-col gap-3">
+            <Step n={1} title="Open Business Settings — not the app dashboard">
+              <p>
+                Go to{" "}
+                <a
+                  href="https://business.facebook.com/settings"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-accent underline underline-offset-2"
+                >
+                  business.facebook.com/settings
+                </a>
+                . This is a different place from the developer dashboard where you got the
+                temporary token, which is the main reason people cannot find this.
+              </p>
+              <p className="text-ink-3">
+                If you are asked to pick a business, choose the one your WhatsApp number belongs to.
+              </p>
+            </Step>
+
+            <Step n={2} title="Create a System User">
+              <p>
+                In the left menu, under <strong>Users</strong>, click <strong>System users</strong>,
+                then <strong>Add</strong>. Name it something you will recognise later — “cadence”
+                is fine — and set the role to <strong>Admin</strong>.
+              </p>
+            </Step>
+
+            <Step n={3} title="Give it your app and your WhatsApp account">
+              <p>
+                With the new system user selected, click <strong>Add assets</strong>. You need to do
+                this <em>twice</em>, and missing the second one is the usual reason the finished
+                token does not work:
+              </p>
+              <p>
+                Under <strong>Apps</strong>, pick your app and turn on{" "}
+                <strong>Manage app</strong>. Then click <strong>Add assets</strong> again, go to{" "}
+                <strong>WhatsApp accounts</strong>, pick your account and turn on{" "}
+                <strong>Manage</strong>.
+              </p>
+            </Step>
+
+            <Step n={4} title="Generate the token">
+              <p>
+                Click <strong>Generate new token</strong>. Choose your app, then set{" "}
+                <strong>Token expiration</strong> to <strong>Never</strong> — this is the whole
+                point, and it is easy to skip past.
+              </p>
+              <p>
+                Tick exactly two permissions: <strong>whatsapp_business_messaging</strong> and{" "}
+                <strong>whatsapp_business_management</strong>. Nothing else is needed, and a token
+                can only do what you tick.
+              </p>
+            </Step>
+
+            <Step n={5} title="Copy it now — you cannot see it again">
+              <p>
+                Meta shows the token once. Copy it, paste it into the{" "}
+                <strong>Access token</strong> field above, and press Save. Leave every other field
+                alone; the phone number ID, app secret and verify token are unchanged.
+              </p>
+              <p>
+                Then press <strong>Check the connection</strong> above. It should say your business
+                name and number back to you.
+              </p>
+            </Step>
+          </ol>
+
+          <p className="mt-5 max-w-[72ch] text-[13px] leading-relaxed text-ink-3">
+            If <strong>System users</strong> is not in your menu, your WhatsApp number is attached
+            to a personal developer account rather than a business one. Meta requires a Business
+            account for permanent tokens — you can create one from the same settings page, and your
+            existing app and number can be moved into it.
+          </p>
+        </Section>
+      )}
+
       {/* ── When it goes wrong ─────────────────────────────────────── */}
       <Section title="If something is not working">
         <dl className="flex max-w-[76ch] flex-col gap-4 text-sm">
