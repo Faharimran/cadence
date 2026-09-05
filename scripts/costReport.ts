@@ -33,12 +33,31 @@ const PRICING: Record<string, { input: number; output: number }> = {
 };
 
 const CACHE_READ = 0.1; // ×input
+const WRITE_5MIN = 1.25; // ×input
+const WRITE_1HOUR = 2.0; // ×input
+
 /**
- * 2× because the cache is written with a one-hour TTL rather than the default
- * five minutes. Five is shorter than a conversation, so the default bills 1.25×
- * several times over; an hour bills 2× once. See the note in agent.ts.
+ * How long a customer takes to reply.
+ *
+ * This is the number that decides whether the cache TTL matters, and leaving it
+ * out is how the first version of this report managed to make a real saving look
+ * like a loss: it charged one cache write under both TTLs, which prices the
+ * one-hour entry at its higher rate while crediting it for none of the rewrites
+ * it exists to avoid.
+ *
+ * Four minutes is being kind to the five-minute default. People read a reply,
+ * think, ask whoever they are booking for, and answer — on WhatsApp that is
+ * minutes, not seconds, which is exactly the window the default TTL falls
+ * inside.
  */
-const CACHE_WRITE = 2.0; // ×input
+const MINUTES_BETWEEN_MESSAGES = 4;
+
+/** How many times the cacheable block gets written, at a given TTL. */
+function cacheWrites(ttlMinutes: number): number {
+  const spanMinutes = (TURNS_PER_CONVERSATION - 1) * MINUTES_BETWEEN_MESSAGES;
+  // The first message always writes; after that, one more write per expiry.
+  return 1 + Math.floor(spanMinutes / ttlMinutes);
+}
 
 const SLUG = process.env.CADENCE_TENANT ?? "cara-clinic";
 
@@ -169,10 +188,10 @@ async function main() {
       const outputMultiplier = effort === "low" ? 0.6 : effort === "high" ? 2.2 : 1;
       const outTokens = OUTPUT_TOKENS_PER_ROUNDTRIP * outputMultiplier;
 
-      // First call of a conversation writes the cache; the rest read it.
-      const writeCost = (cachedTokens / 1e6) * price.input * CACHE_WRITE;
+      const writes = cacheWrites(60);
+      const writeCost = ((cachedTokens * writes) / 1e6) * price.input * WRITE_1HOUR;
       const readCost =
-        ((cachedTokens * (roundTripsPerConversation - 1)) / 1e6) * price.input * CACHE_READ;
+        ((cachedTokens * (roundTripsPerConversation - writes)) / 1e6) * price.input * CACHE_READ;
       const freshCost = ((uncachedTokens * roundTripsPerConversation) / 1e6) * price.input;
       const outCost = ((outTokens * roundTripsPerConversation) / 1e6) * price.output;
 
@@ -195,17 +214,30 @@ async function main() {
   console.log(`  (that is $${(30_000 / 88 / 20_000).toFixed(4)} per conversation)`);
   console.log("═".repeat(72));
 
-  // The single biggest lever, stated plainly.
+  // The two levers, priced against each other rather than asserted.
   const opus = PRICING["claude-opus-5"];
-  const uncachedPerConv =
-    ((cachedTokens + uncachedTokens) / 1e6) * opus.input * roundTripsPerConversation;
-  const cachedPerConv =
-    (cachedTokens / 1e6) * opus.input * CACHE_WRITE +
-    ((cachedTokens * (roundTripsPerConversation - 1)) / 1e6) * opus.input * CACHE_READ +
+  const inputCost = (writes: number, writeRate: number) =>
+    ((cachedTokens * writes) / 1e6) * opus.input * writeRate +
+    ((cachedTokens * (roundTripsPerConversation - writes)) / 1e6) * opus.input * CACHE_READ +
     ((uncachedTokens * roundTripsPerConversation) / 1e6) * opus.input;
+
+  const noCache = ((cachedTokens + uncachedTokens) / 1e6) * opus.input * roundTripsPerConversation;
+  const fiveMin = inputCost(cacheWrites(5), WRITE_5MIN);
+  const oneHour = inputCost(cacheWrites(60), WRITE_1HOUR);
+
   console.log(
-    `\nCaching alone saves ${usd(uncachedPerConv - cachedPerConv)} per conversation on Opus` +
-      ` — ${Math.round((1 - cachedPerConv / uncachedPerConv) * 100)}% of input cost.\n`,
+    `\nInput cost per conversation on Opus, at ${MINUTES_BETWEEN_MESSAGES} minutes between messages:`,
+  );
+  console.log(`  no caching at all           ${usd(noCache)}`);
+  console.log(
+    `  5-minute cache (default)    ${usd(fiveMin)}   ${cacheWrites(5)} writes — it expires mid-conversation`,
+  );
+  console.log(
+    `  1-hour cache (now)          ${usd(oneHour)}   ${cacheWrites(60)} write, survives the whole thing`,
+  );
+  console.log(
+    `\n  → the TTL change alone saves ${usd(fiveMin - oneHour)} per conversation` +
+      ` (${Math.round((1 - oneHour / fiveMin) * 100)}% of input cost)\n`,
   );
 }
 
