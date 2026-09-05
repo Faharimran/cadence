@@ -50,8 +50,12 @@ export async function GET() {
   // build. This reports what is answering requests, which is the actual
   // question, and it costs one string.
   //
-  // Railway injects the SHA; anywhere else this is simply absent.
-  const version = process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? "local";
+  // CADENCE_VERSION is set by `npm run deploy`, which is how this project
+  // actually ships — `railway up` uploads a directory, so Railway's own
+  // RAILWAY_GIT_COMMIT_SHA is never populated and reported "local" from
+  // production, which is worse than reporting nothing.
+  const version =
+    process.env.CADENCE_VERSION ?? process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? "unknown";
 
   return Response.json(
     { status: healthy ? "ok" : "degraded", version, checks },
