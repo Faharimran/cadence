@@ -7,7 +7,7 @@ import {
   deleteSource,
   approveAllFromSource,
 } from "./actions";
-import { NewDocForm, EditDocForm, UploadForm } from "./DocForms";
+import { NewDocForm, EditDocForm, UploadForm, WebsiteForm } from "./DocForms";
 import { Button, Empty, PageHeader, Pill, Row, Section } from "../ui";
 
 export const dynamic = "force-dynamic";
@@ -58,9 +58,12 @@ export default async function KnowledgePage() {
             {sources.map((s) => (
               <Row key={s.id}>
                 <span className="font-mono text-sm font-semibold">{s.filename}</span>
+                {/* A website has no file size, and "0 KB" beside a domain name
+                    reads as something having gone wrong. */}
                 <span className="font-mono text-[11px] tabular-nums text-ink-3">
-                  {(s.byteSize / 1024).toFixed(0)} KB
-                  {s.pageCount ? ` · ${s.pageCount} pages` : ""}
+                  {s.kind === "web"
+                    ? `website${s.pageCount ? ` · ${s.pageCount} pages read` : ""}`
+                    : `${(s.byteSize / 1024).toFixed(0)} KB${s.pageCount ? ` · ${s.pageCount} pages` : ""}`}
                 </span>
 
                 {s.status === "extracting" && <Pill tone="warn">reading…</Pill>}

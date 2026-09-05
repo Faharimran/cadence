@@ -978,10 +978,23 @@ model KnowledgeSource {
   tenantId String
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  /// file | web. A website is a living source: re-reading it is expected, and
+  /// the same address read twice is the same source updated, not a second copy.
+  /// A file is fixed, and two uploads of the same bytes are likewise one source.
+  kind String @default("file")
+
+  /// Where a web source was read from. Null for uploads.
+  sourceUrl String?
+
   filename  String
   mimeType  String
   byteSize  Int
-  /// SHA-256 of the uploaded bytes.
+  /// SHA-256 of the uploaded bytes for a file; of the address for a website.
+  ///
+  /// Hashing the ADDRESS rather than the fetched text is deliberate: a site
+  /// whose wording changed slightly is the same source read again, and hashing
+  /// its content would strand the old articles under an orphaned source every
+  /// time somebody fixed a typo on their homepage.
   checksum  String
   pageCount Int?
 

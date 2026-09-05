@@ -121,6 +121,7 @@ jobs:
       - run: npm run prove:engine
       - run: npm run prove:conversation
       - run: npm run prove:import
+      - run: npm run prove:web
       - run: npm run prove:debounce
       - run: npm run prove:delivery
 

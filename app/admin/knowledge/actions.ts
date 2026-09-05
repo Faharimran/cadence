@@ -5,7 +5,9 @@ import { z } from "zod";
 import { requireUser, asTenant } from "@/lib/auth/guard";
 import { logger } from "@/lib/logger";
 import { checksumOf, stashUpload } from "@/lib/knowledge/ingest";
+import { createHash } from "node:crypto";
 import { scheduleIngest } from "@/lib/queue";
+import { normaliseSiteUrl, WebSourceError } from "@/lib/knowledge/web";
 
 /**
  * Writing down what the business knows.
@@ -340,4 +342,75 @@ export async function restoreDoc(formData: FormData): Promise<void> {
     });
     revalidatePath("/admin/knowledge");
   });
+}
+
+/**
+ * Points cadence at the business's own website.
+ *
+ * Validation happens here, before anything is queued, so a mistyped address or a
+ * private URL is refused while the person is still looking at the form rather
+ * than becoming a failed row they have to come back and read.
+ *
+ * The address is the identity: reading the same site twice updates that source
+ * rather than creating a second one, which is what makes "read it again" a
+ * sensible button. Hashing the fetched text instead would strand the old
+ * articles under an orphaned source every time somebody fixed a typo on their
+ * homepage.
+ */
+export async function addWebsiteSource(
+  _previous: KnowledgeFormState,
+  formData: FormData,
+): Promise<KnowledgeFormState> {
+  const user = await requireUser();
+
+  let url: URL;
+  try {
+    url = normaliseSiteUrl(String(formData.get("url") ?? ""));
+  } catch (err) {
+    return {
+      error: err instanceof WebSourceError ? `${err.message} ${err.remedy}` : "That is not a web address.",
+    };
+  }
+
+  const checksum = createHash("sha256").update(`web:${url.toString()}`).digest("hex");
+
+  const result = await asTenant(user, async (db) => {
+    const existing = await db.knowledgeSource.findFirst({
+      where: { tenantId: user.tenantId, checksum },
+      select: { id: true },
+    });
+
+    if (existing) {
+      // Re-reading, not duplicating. Back to "extracting" so the screen shows
+      // it working rather than showing last week's outcome.
+      await db.knowledgeSource.update({
+        where: { id: existing.id },
+        data: { status: "extracting", failureNote: null },
+      });
+      return { sourceId: existing.id, again: true };
+    }
+
+    const source = await db.knowledgeSource.create({
+      data: {
+        tenantId: user.tenantId,
+        kind: "web",
+        sourceUrl: url.toString(),
+        filename: url.hostname,
+        mimeType: "text/html",
+        byteSize: 0,
+        checksum,
+        uploadedById: user.id,
+      },
+    });
+    return { sourceId: source.id, again: false };
+  });
+
+  await scheduleIngest({ tenantId: user.tenantId, sourceId: result.sourceId, kind: "web" });
+
+  revalidatePath("/admin/knowledge");
+  return {
+    ok: result.again
+      ? `Reading ${url.hostname} again. Anything new arrives as a draft; what you already approved stays as it is.`
+      : `Reading ${url.hostname} now. It follows links within the site, up to twenty-five pages, and everything it finds arrives as a draft for you to check.`,
+  };
 }

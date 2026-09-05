@@ -11,7 +11,7 @@ import {
   type AgentTurnJob,
   type KnowledgeIngestJob,
 } from "@/lib/queue";
-import { ingestSource, takeUpload } from "@/lib/knowledge/ingest";
+import { ingestSource, ingestWebSource, takeUpload } from "@/lib/knowledge/ingest";
 import { runAgentTurn, isAgentConfigured } from "@/lib/conversation/agent";
 import { syncLink } from "@/lib/imports";
 import { expireStaleHolds } from "@/lib/engine/booking";
@@ -111,7 +111,18 @@ agentWorker.on("failed", (job, err) => {
 const ingestWorker = new Worker<KnowledgeIngestJob>(
   INGEST_QUEUE,
   async (job) => {
-    const { tenantId, sourceId } = job.data;
+    const { tenantId, sourceId, kind } = job.data;
+
+    // A website has nothing stashed to read — it is fetched here, now.
+    if (kind === "web") {
+      return withTenant(
+        tenantId,
+        (db) => ingestWebSource(db, { tenantId, sourceId }),
+        // A bounded crawl of up to 25 pages, paused between requests to be
+        // polite, plus a titling call per batch. Minutes, legitimately.
+        { timeoutMs: 900_000 },
+      );
+    }
 
     const bytes = await takeUpload(sourceId);
     if (!bytes) {

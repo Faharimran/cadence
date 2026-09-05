@@ -23,6 +23,7 @@
     "check:whatsapp": "tsx scripts/checkWhatsApp.ts",
     "cost": "dotenv -e .env.local -- tsx scripts/costReport.ts",
     "try:import": "dotenv -e .env.local -- tsx scripts/tryImport.ts",
+    "prove:web": "dotenv -e .env.local -- tsx scripts/proveWebKnowledge.ts",
     "prove:import": "dotenv -e .env.local -- tsx scripts/proveImport.ts",
     "prove:engine": "dotenv -e .env.local -- tsx scripts/proveEngine.ts",
     "prove:conversation": "dotenv -e .env.local -- tsx scripts/proveConversation.ts",

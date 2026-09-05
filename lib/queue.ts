@@ -145,7 +145,17 @@ export function knowledgeIngests(): Queue {
   return knowledgeIngestQueue;
 }
 
-export type KnowledgeIngestJob = { tenantId: string; sourceId: string };
+export type KnowledgeIngestJob = {
+  tenantId: string;
+  sourceId: string;
+  /**
+   * "file" reads bytes stashed in Redis; "web" fetches the site itself.
+   *
+   * Optional because jobs queued before websites existed do not carry it, and a
+   * deploy must not strand whatever is already in the queue. Absent means file.
+   */
+  kind?: "file" | "web";
+};
 
 export async function scheduleIngest(job: KnowledgeIngestJob): Promise<void> {
   // The source id is the job id, so a double-submitted upload form cannot start

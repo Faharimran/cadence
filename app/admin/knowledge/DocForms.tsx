@@ -1,7 +1,13 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { createDoc, updateDoc, uploadSource, type KnowledgeFormState } from "./actions";
+import {
+  addWebsiteSource,
+  createDoc,
+  updateDoc,
+  uploadSource,
+  type KnowledgeFormState,
+} from "./actions";
 import { Button, Field, inputClass } from "../ui";
 
 function Feedback({ state }: { state: KnowledgeFormState }) {
@@ -161,6 +167,57 @@ export function EditDocForm({
           cancel
         </Button>
       </div>
+    </form>
+  );
+}
+
+/**
+ * Reading the business's own website.
+ *
+ * Placed alongside the PDF upload rather than behind a separate page, because
+ * from the owner's side these are one question — "how does it learn about us?" —
+ * and the answer happens to have two doors.
+ *
+ * The crawl bounds are stated up front. "It reads your website" invites someone
+ * to paste a URL and expect all four hundred pages of a blog; twenty-five is
+ * generous for a small business site and honest about the rest.
+ */
+export function WebsiteForm() {
+  const [state, action, pending] = useActionState<KnowledgeFormState, FormData>(
+    addWebsiteSource,
+    null,
+  );
+
+  return (
+    <form action={action} className="flex flex-col gap-4">
+      <Field
+        label="Your website"
+        hint="The address customers visit. We follow links within the site — not links away from it."
+      >
+        <input
+          name="url"
+          required
+          inputMode="url"
+          className={inputClass}
+          placeholder="https://yourbusiness.com"
+        />
+      </Field>
+
+      <p className="max-w-[66ch] text-[11px] leading-relaxed text-ink-3">
+        We read up to <strong>25 pages</strong>, two links deep, skipping anything the site asks
+        automated readers not to touch. Menus, cookie banners and footers are stripped out, so what
+        arrives is the writing rather than the furniture. Everything lands as a{" "}
+        <strong>draft</strong> — the assistant sees none of it until you approve it.
+      </p>
+      <p className="max-w-[66ch] text-[11px] leading-relaxed text-ink-3">
+        Pages built entirely in JavaScript cannot be read this way. If your site is one of those,
+        upload a brochure or price list instead.
+      </p>
+
+      <Feedback state={state} />
+      <Button type="submit" disabled={pending}>
+        {pending ? "Starting…" : "Read my website"}
+      </Button>
     </form>
   );
 }

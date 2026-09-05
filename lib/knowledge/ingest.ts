@@ -6,8 +6,9 @@ import type { TenantDb } from "@/lib/prisma";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { redis } from "@/lib/redis";
-import { extractPdf } from "./extract";
+import { extractPdf, type ExtractedPage } from "./extract";
 import { chunkPages, type Chunk } from "./chunk";
+import { crawlSite, normaliseSiteUrl, WebSourceError, type CrawlResult } from "./web";
 
 /**
  * Turning an uploaded document into articles a person can approve.
@@ -132,15 +133,106 @@ export async function ingestSource(
     return { status: "failed", chunkCount: 0, failureNote: extracted.message };
   }
 
-  const chunks = chunkPages(extracted.pages);
+  return ingestPages(db, {
+    tenantId: args.tenantId,
+    source,
+    pages: extracted.pages,
+    pageCount: extracted.pageCount,
+    label: source.filename,
+    pageLabel: (n) => `page ${n}`,
+  });
+}
+
+/**
+ * Reads a business's own website into drafts.
+ *
+ * Shares everything after the fetch with the PDF path — chunking, titling, the
+ * draft state, the approval gate — because the difference between a brochure and
+ * a website is where the words came from, not what happens to them.
+ */
+export async function ingestWebSource(
+  db: TenantDb,
+  args: { tenantId: string; sourceId: string },
+): Promise<IngestOutcome> {
+  const source = await db.knowledgeSource.findFirstOrThrow({
+    where: { id: args.sourceId, tenantId: args.tenantId },
+  });
+
+  if (!source.sourceUrl) {
+    const note = "That source has no website address saved.";
+    await db.knowledgeSource.update({
+      where: { id: source.id },
+      data: { status: "failed", failureNote: note },
+    });
+    return { status: "failed", chunkCount: 0, failureNote: note };
+  }
+
+  let crawl: CrawlResult;
+  try {
+    crawl = await crawlSite(normaliseSiteUrl(source.sourceUrl));
+  } catch (err) {
+    const note =
+      err instanceof WebSourceError
+        ? `${err.message} ${err.remedy}`
+        : "Something went wrong reading that website.";
+    if (!(err instanceof WebSourceError)) {
+      logger.error("web knowledge crawl failed", {
+        sourceId: source.id,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+    await db.knowledgeSource.update({
+      where: { id: source.id },
+      data: { status: "failed", failureNote: note },
+    });
+    return { status: "failed", chunkCount: 0, failureNote: note };
+  }
+
+  // Re-reading a site replaces what it produced last time — but only the drafts.
+  //
+  // A website is expected to be read again; without this, every re-read would
+  // add a second near-identical copy of every page. Approved articles are left
+  // alone deliberately: somebody read those and signed them off, they are live
+  // answers now, and a re-read is not a reason to withdraw them.
+  await db.knowledgeDoc.deleteMany({
+    where: { tenantId: args.tenantId, sourceId: source.id, status: "draft" },
+  });
+
+  return ingestPages(db, {
+    tenantId: args.tenantId,
+    source,
+    pages: crawl.pages,
+    pageCount: crawl.pages.length,
+    label: crawl.siteTitle || source.sourceUrl,
+    // The reviewer sees the address a passage came from, not "page 3".
+    pageLabel: (n) => crawl.urls[n - 1] ?? `page ${n}`,
+  });
+}
+
+/** Everything both sources do once they have pages of text. */
+async function ingestPages(
+  db: TenantDb,
+  args: {
+    tenantId: string;
+    source: { id: string; filename: string; uploadedById: string | null };
+    pages: ExtractedPage[];
+    pageCount: number;
+    label: string;
+    pageLabel: (page: number) => string;
+  },
+): Promise<IngestOutcome> {
+  const source = args.source;
+  const chunks = chunkPages(args.pages);
 
   // Stored before titling. If the model call fails, the reviewer can still see
-  // what was read out of their file rather than an empty failure.
+  // what was read rather than an empty failure.
   await db.knowledgeSource.update({
     where: { id: source.id },
     data: {
-      pageCount: extracted.pageCount,
-      extractedText: extracted.pages.map((p) => `--- page ${p.page} ---\n${p.text}`).join("\n\n"),
+      pageCount: args.pageCount,
+      extractedText: args.pages
+        .map((p) => `--- ${args.pageLabel(p.page)} ---\n${p.text}`)
+        .join("\n\n"),
     },
   });
 
