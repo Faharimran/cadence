@@ -33,7 +33,12 @@ const PRICING: Record<string, { input: number; output: number }> = {
 };
 
 const CACHE_READ = 0.1; // ×input
-const CACHE_WRITE = 1.25; // ×input
+/**
+ * 2× because the cache is written with a one-hour TTL rather than the default
+ * five minutes. Five is shorter than a conversation, so the default bills 1.25×
+ * several times over; an hour bills 2× once. See the note in agent.ts.
+ */
+const CACHE_WRITE = 2.0; // ×input
 
 const SLUG = process.env.CADENCE_TENANT ?? "cara-clinic";
 
@@ -46,7 +51,13 @@ const SLUG = process.env.CADENCE_TENANT ?? "cara-clinic";
  * re-sending the entire prompt.
  */
 const TURNS_PER_CONVERSATION = 6;
-const ROUNDTRIPS_PER_TURN = 2.5;
+/**
+ * Was 2.5, when the catalogue had to be fetched with `list_services` before the
+ * assistant could say what anything cost. It is now in the cached prompt, so the
+ * commonest question in the whole product — "what do you do and how much" —
+ * costs one call rather than two.
+ */
+const ROUNDTRIPS_PER_TURN = 1.6;
 const OUTPUT_TOKENS_PER_ROUNDTRIP = 180;
 
 const usd = (n: number) => `$${n.toFixed(4)}`;

@@ -5,7 +5,7 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { CadenceError } from "@/lib/api/errors";
 import { resolveCapabilities } from "@/lib/conversation/capabilities";
-import { getSnapshot } from "@/lib/conversation/snapshot";
+import { getSnapshot, type ServiceSummary } from "@/lib/conversation/snapshot";
 import { buildTools, type ToolContext } from "@/lib/conversation/tools";
 import { loadTranscript, recordOutbound, COLLEAGUE_PREFIX } from "@/lib/conversation/thread";
 import { buildKnowledgeContext, type KnowledgeContext } from "@/lib/knowledge";
@@ -231,12 +231,67 @@ export type TenantVoice = {
   escalationTopics: string[];
 };
 
+/**
+ * How many services can sit in the prompt before it stops being worth it.
+ *
+ * The trade is between one round trip and some cached tokens. A round trip
+ * re-sends the ENTIRE prompt and bills a fresh completion; cached tokens cost a
+ * tenth of the input rate to re-read. So for a catalogue of any ordinary size,
+ * putting it in the prompt is both cheaper and a reply that arrives seconds
+ * sooner — `list_services` did no I/O at all, it read a snapshot already in
+ * memory, and the model was spending a whole API call to look at data the
+ * server was already holding.
+ *
+ * Past this many, the arithmetic turns over: the catalogue is re-read on every
+ * round trip whether the customer asked about it or not, and the tool becomes
+ * the cheaper way round.
+ */
+const CATALOGUE_INLINE_LIMIT = 60;
+
+/**
+ * The catalogue, written out rather than fetched.
+ *
+ * Prices are used exactly as the snapshot rendered them — already formatted in
+ * the tenant's currency — because a model that is handed a number and a currency
+ * code will eventually format one itself, and get it wrong for somebody.
+ */
+function catalogueSection(services: ServiceSummary[] | undefined): string {
+  if (!services || services.length === 0 || services.length > CATALOGUE_INLINE_LIMIT) return "";
+
+  const byCategory = new Map<string, ServiceSummary[]>();
+  for (const s of services) {
+    const key = s.category ?? "";
+    if (!byCategory.has(key)) byCategory.set(key, []);
+    byCategory.get(key)!.push(s);
+  }
+
+  const line = (s: ServiceSummary) => {
+    const bits = [`${s.durationMinutes} min`];
+    if (s.quotable && s.price) bits.push(s.price);
+    else bits.push("price on request");
+    return `- ${s.name} — ${bits.join(", ")}  [id: ${s.id}]`;
+  };
+
+  const body = [...byCategory.entries()]
+    .map(([category, items]) =>
+      category ? `\n**${category}**\n${items.map(line).join("\n")}` : items.map(line).join("\n"),
+    )
+    .join("\n");
+
+  return `
+## What is offered
+${body}
+
+These are the prices. Quote them as written — do not convert, round, or add anything to them. A service marked "price on request" has no price you may state; say a colleague will confirm it. Use the id when calling a tool that needs one.
+`;
+}
+
 /** Exported so scripts/proveKnowledge.ts can assert on what it actually says. */
 export function systemPrompt(
   tenant: TenantVoice,
   capabilities: string[],
   knowledge: KnowledgeContext,
-  snapshot: { degraded: boolean },
+  snapshot: { degraded: boolean; services?: { data: ServiceSummary[] } },
 ): Anthropic.Beta.BetaTextBlockParam[] {
   const now = formatInTimeZone(new Date(), tenant.timezone, "EEEE d MMMM yyyy, HH:mm");
 
@@ -246,7 +301,7 @@ ${tenant.descriptor ? `\n## About ${tenant.name}\n${tenant.descriptor}\n` : ""}
 ${capabilities.map((c) => `- ${c}`).join("\n")}
 
 Your tools are the only things you can do. If a customer asks for something no tool covers, say so plainly and offer to have a colleague help — do not improvise a way round it.
-${
+${catalogueSection(snapshot.services?.data)}${
     tenant.agentInstructions?.trim()
       ? `\n## What ${tenant.name} has told you to do\nThese are the owner's own instructions. Follow them.\n\n${tenant.agentInstructions.trim()}\n`
       : ""
@@ -316,7 +371,19 @@ When you book something, confirm what, when, where and who in one line, so they 
   }`;
 
   return [
-    { type: "text", text: stable, cache_control: { type: "ephemeral" } },
+    // An hour, not the default five minutes, and the difference is most of the
+    // input bill.
+    //
+    // Five minutes is shorter than a conversation. Somebody asks a question,
+    // reads the reply, talks to their partner, and answers eight minutes later
+    // — by which time the cache has expired and this entire block, which is
+    // nearly the whole prompt, is written again at 1.25× the input rate. A
+    // six-message conversation could pay for three or four writes.
+    //
+    // A one-hour entry costs 2× to write instead of 1.25×, and is written once.
+    // That is cheaper from the second write onwards, and every real WhatsApp
+    // conversation has a second write.
+    { type: "text", text: stable, cache_control: { type: "ephemeral", ttl: "1h" } },
     { type: "text", text: volatile },
   ];
 }
