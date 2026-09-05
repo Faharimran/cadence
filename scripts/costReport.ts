@@ -159,6 +159,49 @@ async function main() {
   console.log(`  ${tenant.name} — what a conversation costs`);
   console.log("═".repeat(72));
 
+  // Where the prompt actually goes, section by section.
+  //
+  // Without this, trimming is guesswork, and guesswork here removes the rules
+  // that stop a price being invented rather than the paragraph nobody reads.
+  // Sections are split on the markdown headings the prompt is written with.
+  const sections: { name: string; chars: number }[] = [];
+  for (const block of system) {
+    const parts = block.text.split(/\n(?=## )/);
+    for (const part of parts) {
+      const name = part.startsWith("## ")
+        ? part.slice(3, part.indexOf("\n") === -1 ? undefined : part.indexOf("\n")).trim()
+        : "(opening)";
+      sections.push({ name, chars: part.length });
+    }
+  }
+  sections.sort((a, b) => b.chars - a.chars);
+
+  const totalChars = sections.reduce((n, s) => n + s.chars, 0);
+  console.log(`\nWhere the system prompt goes (${totalChars.toLocaleString()} chars):`);
+  for (const s of sections) {
+    const share = Math.round((s.chars / totalChars) * 100);
+    const bar = "█".repeat(Math.max(1, Math.round(share / 2)));
+    console.log(
+      `  ${s.name.slice(0, 34).padEnd(35)} ${String(s.chars).padStart(6)}  ${String(share).padStart(2)}%  ${bar}`,
+    );
+  }
+
+  // Tool schemas are re-read on every round trip too, and are easy to forget
+  // because nobody writes them as prose.
+  console.log(`\nTool schemas, largest first:`);
+  const toolSizes = (tools as { name: string; description?: string; input_schema?: unknown }[])
+    .map((t) => ({
+      name: t.name,
+      chars: JSON.stringify(t).length,
+      desc: (t.description ?? "").length,
+    }))
+    .sort((a, b) => b.chars - a.chars);
+  for (const t of toolSizes) {
+    console.log(
+      `  ${t.name.padEnd(24)} ${String(t.chars).padStart(6)} chars  (description ${t.desc})`,
+    );
+  }
+
   console.log(`\nPrompt, measured:`);
   console.log(`  system prompt          ${systemTokens.toLocaleString().padStart(8)} tokens`);
   console.log(`    · cacheable block     ${stableChars.toLocaleString().padStart(8)} chars`);
