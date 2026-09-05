@@ -414,3 +414,92 @@ export async function addWebsiteSource(
       : `Reading ${url.hostname} now. It follows links within the site, up to twenty-five pages, and everything it finds arrives as a draft for you to check.`,
   };
 }
+
+/**
+ * Approves every draft carrying one tag.
+ *
+ * The reason this is worth having: a website read produces drafts across the
+ * whole site at once, and they sort naturally by subject rather than by page —
+ * "parking", "pricing", "aftercare". Reading forty drafts one at a time is how
+ * an import ends up half-approved and abandoned. Reading the six tagged
+ * "parking" together is a decision somebody can actually make.
+ *
+ * Deliberately scoped to DRAFTS. It cannot touch an archived article, so it can
+ * never quietly resurrect something a person retired on purpose — a subtlety
+ * that matters, because "retired" and "not yet approved" look similar in a list
+ * and are opposite intentions.
+ *
+ * Optionally scoped to one source too, so approving "pricing" from the website
+ * does not also approve "pricing" drafts from a brochure uploaded last week and
+ * never reviewed.
+ */
+export async function approveByTag(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const tag = String(formData.get("tag") ?? "").trim().toLowerCase();
+  const sourceId = String(formData.get("sourceId") ?? "").trim();
+  if (!tag) return;
+
+  await asTenant(user, async (db) => {
+    const drafts = await db.knowledgeDoc.findMany({
+      where: {
+        tenantId: user.tenantId,
+        status: "draft",
+        tags: { has: tag },
+        ...(sourceId ? { sourceId } : {}),
+      },
+    });
+    if (drafts.length === 0) return;
+
+    for (const doc of drafts) {
+      const version = doc.approvedAt ? doc.version + 1 : doc.version;
+      await db.knowledgeDoc.update({
+        where: { id: doc.id },
+        data: { status: "approved", version, approvedById: user.id, approvedAt: new Date() },
+      });
+      // Same revision trail as a single approval. A bulk action is still every
+      // one of those approvals, and the history has to say who signed each off.
+      await db.knowledgeRevision.create({
+        data: {
+          tenantId: user.tenantId,
+          docId: doc.id,
+          version,
+          title: doc.title,
+          body: doc.body,
+          authorId: doc.authorId,
+          approvedById: user.id,
+        },
+      });
+    }
+
+    // A source with nothing left to check is done being checked.
+    const touched = [...new Set(drafts.map((d) => d.sourceId).filter(Boolean))] as string[];
+    for (const id of touched) {
+      const remaining = await db.knowledgeDoc.count({
+        where: { tenantId: user.tenantId, sourceId: id, status: "draft" },
+      });
+      if (remaining === 0) {
+        await db.knowledgeSource.updateMany({
+          where: { id, tenantId: user.tenantId },
+          data: { status: "done" },
+        });
+      }
+    }
+
+    await db.auditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actor: `user:${user.id}`,
+        action: "knowledge.bulk_approved_by_tag",
+        subject: sourceId ? `KnowledgeSource:${sourceId}` : `Tenant:${user.tenantId}`,
+        after: { tag, approved: drafts.length },
+      },
+    });
+
+    logger.info("knowledge approved by tag", {
+      tenantId: user.tenantId,
+      tag,
+      count: drafts.length,
+    });
+    revalidatePath("/admin/knowledge");
+  });
+}

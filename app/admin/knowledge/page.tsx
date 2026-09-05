@@ -6,6 +6,7 @@ import {
   restoreDoc,
   deleteSource,
   approveAllFromSource,
+  approveByTag,
 } from "./actions";
 import { NewDocForm, EditDocForm, UploadForm, WebsiteForm } from "./DocForms";
 import { Button, Empty, PageHeader, Pill, Row, Section } from "../ui";
@@ -38,6 +39,17 @@ export default async function KnowledgePage() {
   const working = sources.filter((s) => s.status === "extracting");
 
   const drafts = docs.filter((d) => d.status === "draft");
+
+  // Subjects present across the drafts, commonest first — the ones worth
+  // approving together are the ones there are several of.
+  const draftTags = [...
+    drafts
+      .flatMap((d) => d.tags)
+      .reduce((m, t) => m.set(t, (m.get(t) ?? 0) + 1), new Map<string, number>())
+  ]
+    .map(([tag, count]) => ({ tag, count }))
+    .filter((t) => t.count > 1)
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
   const live = docs.filter((d) => d.status === "approved");
   const archived = docs.filter((d) => d.status === "archived");
 
@@ -120,6 +132,36 @@ export default async function KnowledgePage() {
             The assistant cannot see any of these. Read each one as though a customer were reading
             it, then approve.
           </p>
+
+          {/* Approving a subject at a time.
+              A website read produces drafts across the whole site at once, and
+              they group by subject rather than by page. Forty drafts approved
+              one at a time is how an import ends up half-done and abandoned;
+              the six about parking are a decision somebody can actually make.
+              Counts are shown because the number going live is the thing worth
+              knowing before pressing it. */}
+          {draftTags.length > 0 && (
+            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface-2 p-3">
+              <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-3">
+                approve a subject
+              </span>
+              {draftTags.map(({ tag, count }) => (
+                <form key={tag} action={approveByTag}>
+                  <input type="hidden" name="tag" value={tag} />
+                  <button
+                    type="submit"
+                    className="rounded-full border border-line px-3 py-1 font-mono text-[11px] transition-colors hover:border-accent hover:text-accent"
+                  >
+                    {tag} <span className="text-ink-3">({count})</span>
+                  </button>
+                </form>
+              ))}
+              <span className="text-[11px] text-ink-3">
+                Approves only drafts — never brings back anything you retired.
+              </span>
+            </div>
+          )}
+
           <ul className="flex flex-col gap-2">
             {drafts.map((d) => (
               <Row key={d.id}>

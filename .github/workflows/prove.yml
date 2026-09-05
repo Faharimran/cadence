@@ -122,6 +122,7 @@ jobs:
       - run: npm run prove:conversation
       - run: npm run prove:import
       - run: npm run prove:web
+      - run: npm run prove:knowledge
       - run: npm run prove:debounce
       - run: npm run prove:delivery
 
@@ -151,9 +152,12 @@ jobs:
       - run: npm run prove:webhook
       - run: npm run prove:platform
 
-      # Two harnesses are deliberately absent, both because they call a model:
-      # prove:knowledge (chunk titling) and prove:demo (needs the demo tenants,
-      # which are seeded with model-written articles). They need a paid key and
-      # their results are not deterministic, and a harness that fails for
-      # reasons unrelated to the change is one people learn to ignore. Run both
-      # locally when touching the knowledge pipeline or the public demo.
+      # prove:demo is the only harness left out. It needs the demo tenants,
+      # which are seeded with model-written articles, so it wants a paid key and
+      # is not deterministic — and a harness that fails for reasons unrelated to
+      # the change is one people learn to ignore. Run it locally when touching
+      # the public demo.
+      #
+      # prove:knowledge DOES run here: its single model-dependent assertion
+      # skips itself when no key is set, rather than taking the other
+      # seventy-odd deterministic ones down with it.

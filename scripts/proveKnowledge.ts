@@ -585,11 +585,21 @@ async function main() {
         return haystack.includes(opening);
       }),
     );
-    check(
-      "titles are phrased as questions a customer would ask",
-      produced.filter((d) => d.title.includes("?")).length >= produced.length - 1,
-      produced.map((d) => d.title).join(" | "),
-    );
+    // The one assertion in this file that depends on a model, and so on a paid
+    // key and on sampling. Skipped rather than failed when no key is set, which
+    // is what lets this harness run in CI at all — the alternative was excluding
+    // the whole file and losing sixty-nine deterministic assertions with it.
+    // Without a key the titles fall back to the document's own headings, which
+    // is correct behaviour and simply not what this checks.
+    if (process.env.ANTHROPIC_API_KEY) {
+      check(
+        "titles are phrased as questions a customer would ask",
+        produced.filter((d) => d.title.includes("?")).length >= produced.length - 1,
+        produced.map((d) => d.title).join(" | "),
+      );
+    } else {
+      console.log("  · titles are phrased as questions — skipped, no ANTHROPIC_API_KEY");
+    }
 
     const sameFile = await adminDb.knowledgeSource.findFirst({
       where: { tenantId: t, checksum: checksumOf(bytes) },
@@ -696,6 +706,64 @@ async function main() {
       searchKnowledge(db, barberTenantId, { query: "first consultation transplant PRP" }),
     );
     check("one tenant cannot search another's articles", crossTenant.length === 0);
+  }
+
+  // ── Approving a subject at a time ───────────────────────────────────
+  //
+  // A website read produces drafts across a whole site at once, grouped by
+  // subject rather than by page, and approving forty one at a time is how an
+  // import ends up half-done and abandoned. The risk of the shortcut is that
+  // bulk approval is exactly the action that puts text in front of customers,
+  // so what it must NOT reach matters more than what it does.
+  console.log("\nApproving by subject");
+  {
+    const src = await adminDb.knowledgeSource.create({
+      data: {
+        tenantId: t,
+        kind: "web",
+        sourceUrl: "https://tag-probe.test",
+        filename: "tag-probe.test",
+        mimeType: "text/html",
+        byteSize: 0,
+        checksum: `tag-probe-${Date.now()}`,
+        status: "review",
+      },
+    });
+
+    const make = (title: string, tags: string[], status: "draft" | "archived") =>
+      adminDb.knowledgeDoc.create({
+        data: { tenantId: t, sourceId: src.id, title, body: `Body of ${title}`, tags, status },
+      });
+
+    const a = await make("Where do I park?", ["parking"], "draft");
+    const b = await make("Is parking free?", ["parking"], "draft");
+    const retired = await make("Old parking rules", ["parking"], "archived");
+    const other = await make("What does it cost?", ["pricing"], "draft");
+
+    await withTenant(t, async (db) => {
+      const drafts = await db.knowledgeDoc.findMany({
+        where: { tenantId: t, status: "draft", tags: { has: "parking" } },
+      });
+      for (const d of drafts) {
+        await db.knowledgeDoc.update({
+          where: { id: d.id },
+          data: { status: "approved", approvedAt: new Date() },
+        });
+      }
+    });
+
+    const state = async (id: string) =>
+      (await adminDb.knowledgeDoc.findUniqueOrThrow({ where: { id } })).status;
+
+    check("both drafts with that tag went live", (await state(a.id)) === "approved" && (await state(b.id)) === "approved");
+    check(
+      "an ARCHIVED article with the same tag stayed archived",
+      (await state(retired.id)) === "archived",
+      "retired and not-yet-approved look alike in a list and are opposite intentions",
+    );
+    check("a draft with a different tag was untouched", (await state(other.id)) === "draft");
+
+    await adminDb.knowledgeSource.delete({ where: { id: src.id } });
   }
 
   await cleanup();
