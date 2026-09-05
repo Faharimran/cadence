@@ -59,7 +59,12 @@ jobs:
       CADENCE_SECRET: ci-signing-key-0000000000000000000000000000
       CADENCE_ENCRYPTION_KEY: ci-encryption-key-1111111111111111111111111
       CADENCE_BASE_URL: http://localhost:3000
-      CADENCE_SIGNUP_OPEN: "false"
+      # Open, unlike production. proveAuth asserts that a stranger with no
+      # account can still reach /signup — it sits outside the proxy's matcher
+      # deliberately, and that is worth proving stayed true. With signup closed
+      # the page correctly 404s and the assertion correctly fails, which is CI
+      # testing its own configuration rather than the product.
+      CADENCE_SIGNUP_OPEN: "true"
       CADENCE_TEST_URL: http://localhost:3000
 
     steps:
@@ -84,7 +89,7 @@ jobs:
             echo "CADENCE_SECRET=$CADENCE_SECRET"
             echo "CADENCE_ENCRYPTION_KEY=$CADENCE_ENCRYPTION_KEY"
             echo "CADENCE_BASE_URL=$CADENCE_BASE_URL"
-            echo "CADENCE_SIGNUP_OPEN=false"
+            echo "CADENCE_SIGNUP_OPEN=$CADENCE_SIGNUP_OPEN"
           } > .env.local
 
       - run: npx prisma generate
