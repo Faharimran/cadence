@@ -1,0 +1,153 @@
+# The proof harnesses, run on every push.
+#
+# These exist because the interesting guarantees here are not the kind a type
+# checker can hold: that one tenant cannot read another's rows, that a slot
+# cannot be sold twice, that an import will not delete a price list, that the
+# assistant will not quote a price no tool gave it.
+#
+# Every one of those has been broken at least once during development and caught
+# only because somebody happened to run a harness by hand. The debounce bug —
+# where a thread answered once and then ignored the customer for an hour — sat in
+# production precisely that long. This is the answer to "happened to".
+name: prove
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        # Matches production. The engine leans on Postgres-specific behaviour —
+        # an EXCLUDE USING gist constraint for no-double-booking, row-level
+        # security for tenant isolation — so a different version or a different
+        # database proves nothing about what actually runs.
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cadence
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports: ["5432:5432"]
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports: ["6379:6379"]
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cadence
+      DATABASE_APP_URL: postgresql://cadence_app:ci-only-password-not-a-secret@localhost:5432/cadence
+      CADENCE_APP_DB_PASSWORD: ci-only-password-not-a-secret
+      REDIS_URL: redis://localhost:6379
+      # Distinct values, because lib/env.ts refuses to boot when the signing key
+      # and the encryption key are the same — and CI should exercise the same
+      # refusal the real thing does.
+      CADENCE_SECRET: ci-signing-key-0000000000000000000000000000
+      CADENCE_ENCRYPTION_KEY: ci-encryption-key-1111111111111111111111111
+      CADENCE_BASE_URL: http://localhost:3000
+      CADENCE_SIGNUP_OPEN: "false"
+      CADENCE_TEST_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The harnesses all run through `dotenv -e .env.local`, so CI writes one
+      # rather than changing ten npm scripts to suit it. Keeping the scripts
+      # identical is the point: what CI runs is what a developer runs.
+      - name: Write .env.local from CI environment
+        run: |
+          {
+            echo "DATABASE_URL=$DATABASE_URL"
+            echo "DATABASE_APP_URL=$DATABASE_APP_URL"
+            echo "REDIS_URL=$REDIS_URL"
+            echo "CADENCE_SECRET=$CADENCE_SECRET"
+            echo "CADENCE_ENCRYPTION_KEY=$CADENCE_ENCRYPTION_KEY"
+            echo "CADENCE_BASE_URL=$CADENCE_BASE_URL"
+            echo "CADENCE_SIGNUP_OPEN=false"
+          } > .env.local
+
+      - run: npx prisma generate
+
+      - name: Migrate, create the app role, apply RLS
+        # applyRls is not optional and not cosmetic. Prisma does not know the
+        # policies, the exclusion constraint or the full-text index exist, so a
+        # database that only migrated has no tenant isolation whatsoever — and
+        # the isolation assertions would then pass against nothing.
+        run: |
+          npx dotenv -e .env.local -- npx prisma migrate deploy
+          npx dotenv -e .env.local -- npx tsx scripts/bootstrapAppRole.ts "$CADENCE_APP_DB_PASSWORD"
+          npm run db:rls
+
+      - name: Prove the app role cannot bypass its own policies
+        # Ahead of everything else: if this role turned out to be superuser or
+        # BYPASSRLS, every isolation assertion below would pass while proving
+        # nothing at all.
+        run: npx dotenv -e .env.local -- npx tsx scripts/applyRls.ts --verify
+
+      - run: npm run typecheck
+
+      - name: Seed the fixtures
+        run: |
+          npm run seed:demo
+          npm run seed:cara
+
+      # ── Deterministic: no server, no model, no network ───────────────
+      - run: npm run prove:engine
+      - run: npm run prove:conversation
+      - run: npm run prove:import
+      - run: npm run prove:debounce
+      - run: npm run prove:delivery
+
+      # ── The rest need the app actually serving ───────────────────────
+      - name: Build and start the server
+        run: |
+          npm run build
+          npm run start:web > /tmp/server.log 2>&1 &
+          # Polled rather than slept, and with a ceiling. A fixed sleep is either
+          # wasted time or a flake, and CI gets both.
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000/api/health > /dev/null && break
+            sleep 2
+          done
+          curl -sf http://localhost:3000/api/health > /dev/null || {
+            echo "server never came up:"; cat /tmp/server.log; exit 1;
+          }
+
+      - name: Health check reports enforced isolation
+        # Reading this is the cheapest way to catch the failure that matters
+        # most: an app connected as the database owner, where every policy is
+        # in place and inert.
+        run: |
+          curl -sf http://localhost:3000/api/health | tee /dev/stderr | grep -q '"tenantIsolation":"enforced"'
+
+      - run: npm run prove:auth
+      - run: npm run prove:webhook
+      - run: npm run prove:platform
+
+      # Two harnesses are deliberately absent, both because they call a model:
+      # prove:knowledge (chunk titling) and prove:demo (needs the demo tenants,
+      # which are seeded with model-written articles). They need a paid key and
+      # their results are not deterministic, and a harness that fails for
+      # reasons unrelated to the change is one people learn to ignore. Run both
+      # locally when touching the knowledge pipeline or the public demo.
