@@ -41,8 +41,20 @@ export async function GET() {
     checks.overlapConstraint = "unknown";
   }
 
+  // Which commit is actually serving.
+  //
+  // Twice now, "is the change live?" has been answered by reading a deploy
+  // status that said SUCCESS while the running code was something else — once
+  // because the deploy genuinely lagged, once because the change never made it
+  // into the commit at all. A deployment dashboard reports what it was asked to
+  // build. This reports what is answering requests, which is the actual
+  // question, and it costs one string.
+  //
+  // Railway injects the SHA; anywhere else this is simply absent.
+  const version = process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? "local";
+
   return Response.json(
-    { status: healthy ? "ok" : "degraded", checks },
+    { status: healthy ? "ok" : "degraded", version, checks },
     { status: healthy ? 200 : 503 },
   );
 }
