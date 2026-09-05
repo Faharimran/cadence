@@ -72,6 +72,40 @@ function ChoiceCards({
   );
 }
 
+/**
+ * What these instructions cost, said while they are being written.
+ *
+ * Every character here is re-sent on every message, forever. Cara's brief grew
+ * to 5,800 characters — forty per cent of the entire prompt, more than the whole
+ * knowledge corpus — and nothing on this page gave any hint of that. An
+ * invisible recurring cost is one nobody can weigh against the benefit.
+ *
+ * Not a limit and not a warning to obey. Long instructions are often exactly
+ * right; the point is only that the trade should be made knowingly.
+ */
+function InstructionCost({ chars }: { chars: number }) {
+  if (chars === 0) return null;
+
+  // ~3.5 chars per token for English prose. Deliberately approximate — precision
+  // here would need a tokeniser round trip on every keystroke to tell somebody
+  // something a rough figure already tells them.
+  const tokens = Math.round(chars / 3.5);
+  const heavy = chars > 3000;
+
+  return (
+    <p className="text-[11px] text-ink-3">
+      About {tokens.toLocaleString()} tokens, re-sent with every message.
+      {heavy && (
+        <span style={{ color: "var(--warn)" }}>
+          {" "}
+          That is a large share of what the assistant reads each time — worth keeping if you need
+          it, worth trimming if any of it has stopped being true.
+        </span>
+      )}
+    </p>
+  );
+}
+
 export function AgentForm({
   tenant,
 }: {
@@ -83,6 +117,7 @@ export function AgentForm({
   };
 }) {
   const [state, action, pending] = useActionState<SettingsFormState, FormData>(saveAgent, null);
+  const [instructions, setInstructions] = useState(tenant.agentInstructions ?? "");
 
   return (
     <form action={action} className="flex flex-col gap-8">
@@ -93,7 +128,8 @@ export function AgentForm({
         >
           <textarea
             name="agentInstructions"
-            defaultValue={tenant.agentInstructions ?? ""}
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
             rows={14}
             className={`${textareaClass} min-h-[18rem]`}
             placeholder={`Always ask which branch they mean before offering times — we have three and they're a long way apart.
@@ -105,6 +141,7 @@ Don't offer Saturday mornings to new customers; those are for regulars.
 If they mention they're coming for a wedding, say congratulations.`}
           />
         </Field>
+        <InstructionCost chars={instructions.trim().length} />
         <p className="max-w-[70ch] text-[12px] leading-relaxed text-ink-3">
           Anything you write here is treated as a house rule and followed. What it cannot do is
           switch off the handful of rules underneath it — quoting prices only from your catalogue,

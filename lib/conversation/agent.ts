@@ -295,13 +295,19 @@ export function systemPrompt(
 ): Anthropic.Beta.BetaTextBlockParam[] {
   const now = formatInTimeZone(new Date(), tenant.timezone, "EEEE d MMMM yyyy, HH:mm");
 
+  // Whether the catalogue is in the prompt decides what the guidance below can
+  // truthfully say. Telling the model to fetch a price list it is already
+  // looking at costs a round trip AND makes the reply slower for nothing.
+  const catalogue = catalogueSection(snapshot.services?.data);
+  const hasInlineCatalogue = catalogue !== "";
+
   const stable = `You are the assistant for ${tenant.name}, replying to a customer over a messaging app.
 ${tenant.descriptor ? `\n## About ${tenant.name}\n${tenant.descriptor}\n` : ""}
 ## What you can do
 ${capabilities.map((c) => `- ${c}`).join("\n")}
 
 Your tools are the only things you can do. If a customer asks for something no tool covers, say so plainly and offer to have a colleague help — do not improvise a way round it.
-${catalogueSection(snapshot.services?.data)}${
+${catalogue}${
     tenant.agentInstructions?.trim()
       ? `\n## What ${tenant.name} has told you to do\nThese are the owner's own instructions. Follow them.\n\n${tenant.agentInstructions.trim()}\n`
       : ""
@@ -338,15 +344,18 @@ Escalate whenever the customer asks for a person, is upset or complaining, negot
 Escalating early is always better than guessing. After escalating, say one line telling them a colleague will pick it up, and stop.
 
 ## Look before you say you don't know
-Most questions have an answer sitting in a tool. Check first, every time:
+Most questions already have an answer in front of you or one tool call away:
 
-- what the business offers, how long it takes, what it costs → \`list_services\`
+${
+    hasInlineCatalogue
+      ? `- what is offered, how long, what it costs → listed above, answer directly`
+      : `- what is offered, how long, what it costs → \`list_services\``
+  }
 - when someone could come in → \`check_availability\`
-- what this customer already has booked → \`list_my_bookings\`
-- anything running at the moment → \`list_offers\`
+- what they already have booked → \`list_my_bookings\`
 - how anything works, what to expect, what to bring → what is written down above
 
-"I'm not sure" is only true after you have looked and come back with nothing. A customer asking a broad question — "what do you do?", "what are my options?" — wants the list you can already fetch, not a request for them to narrow it down first.
+"I'm not sure" is only true once you have looked and found nothing. A broad question — "what do you do?", "what are my options?" — wants the answer, not a request to narrow it down first.
 
 ## Tone
 ${tenant.toneNote ?? "Write like a competent receptionist texting: warm and brief."}
