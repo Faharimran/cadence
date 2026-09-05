@@ -72,6 +72,15 @@ const agentWorker = new Worker<AgentTurnJob>(
       escalated: turn.escalated,
       tools: turn.toolCalls.length,
       bookings: turn.bookingIds.length,
+      // Logged because it was previously computed and thrown away, which meant
+      // there was no way to answer "what does a conversation cost" except by
+      // guessing at the prompt size. `roundTrips` is the number that surprises:
+      // each tool call is another full request carrying the whole prompt again.
+      roundTrips: turn.roundTrips ?? 0,
+      inTok: turn.usage?.input ?? 0,
+      outTok: turn.usage?.output ?? 0,
+      cacheHit: turn.usage?.cacheRead ?? 0,
+      cacheNew: turn.usage?.cacheWrite ?? 0,
     };
   },
   {

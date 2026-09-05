@@ -39,6 +39,11 @@ export type AgentTurn = {
    * knowledge corpus is reaching the model.
    */
   usage?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  /**
+   * How many API calls this turn took. The cost driver nobody looks at: each
+   * tool call adds a round trip, and every round trip re-sends the whole prompt.
+   */
+  roundTrips?: number;
 };
 
 let client: Anthropic | null = null;
@@ -136,13 +141,33 @@ export async function runAgentTurn(
   // Stopping the agent after an escalation is therefore enforced in the TOOLS
   // (they refuse once `outcome.escalated` is set) rather than by cutting the
   // loop short. Same guarantee, no hang.
+  // Accumulated across the WHOLE loop, not taken from the final message.
+  //
+  // A turn that calls three tools is four API calls, each re-sending the entire
+  // prompt, and each billed. Reading usage off the last one reported a quarter
+  // of what the turn actually cost — which is the wrong direction to be wrong
+  // in when the number is used to decide whether the product is affordable.
+  const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  const roundTrips = { count: 0 };
+  const addUsage = (u: Anthropic.Beta.BetaUsage | undefined) => {
+    if (!u) return;
+    roundTrips.count++;
+    usage.input += u.input_tokens ?? 0;
+    usage.output += u.output_tokens ?? 0;
+    usage.cacheRead += u.cache_read_input_tokens ?? 0;
+    usage.cacheWrite += u.cache_creation_input_tokens ?? 0;
+  };
+
   for await (const message of runner) {
+    addUsage(message.usage);
     for (const block of message.content) {
       if (block.type === "tool_use") toolCalls.push({ name: block.name, input: block.input });
     }
   }
 
   const final = await runner.done();
+  // `done()` resolves to the last message the loop already yielded, so counting
+  // it again would inflate every turn by one round trip.
   const reply = final.content
     .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
     .map((b) => b.text.trim())
@@ -175,12 +200,8 @@ export async function runAgentTurn(
     escalationReasons: outcome.escalationReasons,
     bookingIds: outcome.bookingIds,
     toolCalls,
-    usage: {
-      input: final.usage.input_tokens,
-      output: final.usage.output_tokens,
-      cacheRead: final.usage.cache_read_input_tokens ?? 0,
-      cacheWrite: final.usage.cache_creation_input_tokens ?? 0,
-    },
+    usage,
+    roundTrips: roundTrips.count,
   };
 }
 
