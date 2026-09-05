@@ -48,12 +48,18 @@ export default async function KnowledgePage() {
         lede="The assistant can only repeat what is written here. Anything else — how a treatment works, what to expect, how to prepare — it hands to a colleague rather than guessing. Nothing goes live until someone approves it."
       />
 
+      {/* The website first, because it is the one every business already has.
+          A brochure has to be found and exported; the address is on their card. */}
+      <Section title="Read my website" boxed>
+        <WebsiteForm />
+      </Section>
+
       <Section title="Upload a document" boxed>
         <UploadForm />
       </Section>
 
       {sources.length > 0 && (
-        <Section title="Documents you've uploaded">
+        <Section title="Where your answers came from">
           <ul className="flex flex-col gap-2">
             {sources.map((s) => (
               <Row key={s.id}>
