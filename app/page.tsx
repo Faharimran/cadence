@@ -7,6 +7,8 @@ import { INDUSTRIES, NOT_FOR } from "@/lib/marketing/industries";
 import { isAgentConfigured } from "@/lib/conversation/agent";
 import DemoChat from "./DemoChat";
 import Industries from "./Industries";
+import ApprovalToy from "./ApprovalToy";
+import AvailabilityLab from "./AvailabilityLab";
 
 /**
  * The public page.
@@ -494,65 +496,10 @@ function Approval() {
             </dl>
           </div>
 
-          <FlowCard />
+          <ApprovalToy />
         </div>
       </div>
     </section>
-  );
-}
-
-/** The lifecycle, as the three states an article can actually be in. */
-function FlowCard() {
-  const steps = [
-    { label: "Written or uploaded", state: "draft", note: "the assistant cannot see it" },
-    { label: "Read by a person", state: "draft", note: "edit, retitle, or discard" },
-    { label: "Approved", state: "live", note: "now it can be quoted" },
-  ];
-
-  return (
-    <div className="rounded-3xl border border-white/12 bg-white/5 p-7 backdrop-blur">
-      <ol className="flex flex-col gap-3">
-        {steps.map((s, i) => {
-          const live = s.state === "live";
-          return (
-            <li
-              key={s.label}
-              className="flex items-center gap-4 rounded-2xl border p-4"
-              style={{
-                borderColor: live ? "var(--lime)" : "rgba(255,255,255,0.12)",
-                background: live ? "color-mix(in srgb, var(--lime) 12%, transparent)" : "transparent",
-              }}
-            >
-              <span
-                aria-hidden
-                className="grid size-7 shrink-0 place-items-center rounded-full font-mono text-[11px] font-semibold"
-                style={
-                  live
-                    ? { background: "var(--lime)", color: "var(--lime-ink)" }
-                    : { background: "rgba(255,255,255,0.1)", color: "var(--on-deep-2)" }
-                }
-              >
-                {i + 1}
-              </span>
-              <div className="min-w-0">
-                <p className="text-[14px] font-semibold">{s.label}</p>
-                <p className="text-[12px] text-on-deep-3">{s.note}</p>
-              </div>
-              <span
-                className="ml-auto shrink-0 rounded px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider"
-                style={
-                  live
-                    ? { color: "var(--lime)", border: "1px solid var(--lime)" }
-                    : { color: "var(--on-deep-3)", border: "1px solid rgba(255,255,255,0.18)" }
-                }
-              >
-                {s.state}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
   );
 }
 
@@ -575,11 +522,15 @@ function Availability() {
           <p className="mt-6 text-[15px] leading-relaxed text-m-ink-2">
             An assistant is only as good as the availability behind it. cadence never stores whether
             a slot is free — it works the answer out per question, from your hours, your leave and
-            your bookings.
+            your bookings. Switch a layer below and watch the day change.
           </p>
         </div>
 
-        <div className="mt-14 grid gap-4 md:grid-cols-2">
+        <div className="mt-12">
+          <AvailabilityLab />
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
           {[
             [
               "Two people can't take the same slot",
