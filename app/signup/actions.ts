@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { adminDb } from "@/lib/prisma";
@@ -9,6 +10,8 @@ import { assertValidTimezone } from "@/lib/engine/time";
 import { createSession } from "@/lib/auth/session";
 import { provisionTenant } from "@/lib/provision";
 import { findPreset } from "@/lib/presets";
+import { clientIp } from "@/lib/demo/session";
+import { consumeSignupBudget, signupLimitMessage } from "@/lib/signupLimit";
 
 /**
  * Creating a business and its first user.
@@ -16,7 +19,7 @@ import { findPreset } from "@/lib/presets";
  * The only unauthenticated write in the product, which is why the checks are
  * spelled out rather than inherited: the signup flag is read here as well as in
  * the page, because a Server Action is reachable by direct POST whether or not
- * the page rendered.
+ * the page rendered — and the rate limit is applied here for the same reason.
  */
 
 const SignUp = z.object({
@@ -58,6 +61,11 @@ export async function signUp(_previous: SignUpState, formData: FormData): Promis
   } catch {
     return { error: `'${input.timezone}' isn't a recognised timezone.` };
   }
+
+  // Metered here rather than above, so a mistyped password does not cost
+  // somebody their attempt. Everything before this point is cheap to reject.
+  const budget = await consumeSignupBudget(clientIp(await headers()));
+  if (!budget.ok) return { error: signupLimitMessage(budget.scope) };
 
   let provisioned;
   try {
