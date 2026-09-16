@@ -13,13 +13,13 @@ import { Button, Field, inputClass } from "../ui";
 function Feedback({ state }: { state: SettingsFormState }) {
   if (state?.error)
     return (
-      <p role="alert" className="text-sm" style={{ color: "var(--bad)" }}>
+      <p role="alert" className="txt-bad text-sm">
         {state.error}
       </p>
     );
   if (state?.ok)
     return (
-      <p role="status" className="text-sm" style={{ color: "var(--ok)" }}>
+      <p role="status" className="txt-good text-sm">
         {state.ok}
       </p>
     );
@@ -123,7 +123,7 @@ function ToneField({ initial }: { initial: string }) {
         <button
           type="button"
           onClick={() => setTone("")}
-          className="self-start font-mono text-[11px] text-ink-3 underline underline-offset-2 hover:text-ink"
+          className="self-start text-[11px] text-ink-3 underline underline-offset-2 hover:text-ink"
         >
           clear
         </button>

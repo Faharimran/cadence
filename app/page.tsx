@@ -5,6 +5,9 @@ import { PRESETS, findPreset } from "@/lib/presets";
 import { DEMO_PERSONAS } from "@/lib/demo/personas";
 import { INDUSTRIES, NOT_FOR } from "@/lib/marketing/industries";
 import { isAgentConfigured } from "@/lib/conversation/agent";
+import { readTheme, type Theme } from "@/lib/theme";
+import { ThemeToggle } from "./ThemeToggle";
+import { Icon } from "./icons";
 import DemoChat from "./DemoChat";
 import Industries from "./Industries";
 import ApprovalToy from "./ApprovalToy";
@@ -26,13 +29,17 @@ const signupOpen = env.CADENCE_SIGNUP_OPEN === "true";
 export default async function Home() {
   // Someone already signed in has no use for a sales page.
   const user = await currentUser();
+  // The page follows the same choice as the admin: one toggle, one cookie, and
+  // the answer carries from the landing page into the product.
+  const theme = await readTheme();
 
   return (
-    // The wrapper paints its own ground. <body> uses --paper, which follows the
-    // OS, so a transparent page would put near-black behind every light section
-    // for a dark-mode visitor.
+    // The wrapper paints its own ground rather than inheriting <body>'s, because
+    // this page has its own pair of surfaces (--m-paper and the band) and its
+    // own rhythm between them. Both follow the theme now, so the choice made in
+    // the nav carries through every section.
     <div className="flex flex-col bg-m-paper text-m-ink">
-      <Hero signedIn={Boolean(user)} />
+      <Hero signedIn={Boolean(user)} theme={theme} />
       <Trades />
       <WhatItDoes />
       {/* Straight after the three claims, so the first thing a visitor does
@@ -80,7 +87,7 @@ function Eyebrow({ children, onDeep }: { children: React.ReactNode; onDeep?: boo
       <span
         aria-hidden
         className="inline-block size-1 rounded-full"
-        style={{ background: onDeep ? "var(--lime)" : "var(--signal)" }}
+        style={{ background: onDeep ? "var(--spark)" : "var(--signal)" }}
       />
       {children}
     </p>
@@ -91,16 +98,16 @@ function LimeButton({ href, children }: { href: string; children: React.ReactNod
   return (
     <Link
       href={href}
-      className="group inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-lime"
-      style={{ background: "var(--lime)", color: "var(--lime-ink)" }}
+      className="group inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-spark"
+      style={{ background: "var(--spark)", color: "var(--spark-ink)" }}
     >
       {children}
       <span
         aria-hidden
-        className="grid size-5 place-items-center rounded-full text-[11px] transition-transform group-hover:translate-x-0.5"
-        style={{ background: "var(--lime-ink)", color: "var(--lime)" }}
+        className="grid size-5 place-items-center rounded-full transition-transform group-hover:translate-x-0.5"
+        style={{ background: "var(--spark-ink)", color: "var(--spark)" }}
       >
-        ↗
+        <Icon name="arrow-up-right" size={11} />
       </span>
     </Link>
   );
@@ -110,7 +117,7 @@ function GhostButton({ href, children }: { href: string; children: React.ReactNo
   return (
     <Link
       href={href}
-      className="inline-flex items-center rounded-full border border-white/25 bg-white/5 px-6 py-3 text-sm font-medium text-on-deep backdrop-blur transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white/60"
+      className="band-panel band-panel-interactive inline-flex items-center rounded-full px-6 py-3 text-sm font-medium text-on-deep focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-signal"
     >
       {children}
     </Link>
@@ -121,7 +128,7 @@ function GhostButton({ href, children }: { href: string; children: React.ReactNo
 //  Hero
 // ══════════════════════════════════════════════════════════════════════
 
-function Hero({ signedIn }: { signedIn: boolean }) {
+function Hero({ signedIn, theme }: { signedIn: boolean; theme: Theme }) {
   return (
     <header className="field relative overflow-hidden">
       {/* The receding grid of hours and days. Decorative, so it is hidden from
@@ -140,7 +147,7 @@ function Hero({ signedIn }: { signedIn: boolean }) {
       />
 
       <div className="relative mx-auto w-full max-w-6xl px-6 pb-0 pt-6">
-        <Nav signedIn={signedIn} />
+        <Nav signedIn={signedIn} theme={theme} />
 
         <div className="rise mx-auto mt-20 flex max-w-4xl flex-col items-center text-center">
           <Eyebrow onDeep>Appointment businesses</Eyebrow>
@@ -156,7 +163,7 @@ function Hero({ signedIn }: { signedIn: boolean }) {
           >
             <span className="block sm:whitespace-nowrap">Your assistant answers.</span>
             <span className="block sm:whitespace-nowrap">
-              You approve <span style={{ color: "var(--lime)" }}>every word</span>.
+              You approve <span style={{ color: "var(--spark)" }}>every word</span>.
             </span>
           </h1>
 
@@ -198,14 +205,14 @@ function Hero({ signedIn }: { signedIn: boolean }) {
   );
 }
 
-function Nav({ signedIn }: { signedIn: boolean }) {
+function Nav({ signedIn, theme }: { signedIn: boolean; theme: Theme }) {
   return (
-    <nav className="flex items-center gap-6 rounded-full border border-white/12 bg-white/6 px-5 py-3 backdrop-blur">
+    <nav className="band-panel flex items-center gap-4 rounded-full px-5 py-2.5">
       <Link href="/" className="flex items-center gap-2">
         <span
           aria-hidden
           className="grid size-6 place-items-center rounded-md text-[11px] font-bold"
-          style={{ background: "var(--lime)", color: "var(--lime-ink)" }}
+          style={{ background: "var(--spark)", color: "var(--spark-ink)" }}
         >
           c
         </span>
@@ -235,13 +242,19 @@ function Nav({ signedIn }: { signedIn: boolean }) {
         </a>
       </div>
 
-      <Link
-        href={signedIn ? "/admin" : "/signin"}
-        className="ml-auto rounded-full px-4 py-1.5 text-[13px] font-semibold transition-transform hover:-translate-y-0.5 sm:ml-0"
-        style={{ background: "var(--lime)", color: "var(--lime-ink)" }}
-      >
-        {signedIn ? "Dashboard" : "Sign in"}
-      </Link>
+      {/* The same control as the one in the admin sidebar, writing the same
+          cookie. Someone who sets the page light and then signs up does not
+          find the product has its own opinion. */}
+      <div className="ml-auto flex items-center gap-3 sm:ml-0">
+        <ThemeToggle initial={theme} />
+        <Link
+          href={signedIn ? "/admin" : "/signin"}
+          className="rounded-full px-4 py-1.5 text-[13px] font-semibold transition-transform hover:-translate-y-0.5"
+          style={{ background: "var(--spark)", color: "var(--spark-ink)" }}
+        >
+          {signedIn ? "Dashboard" : "Sign in"}
+        </Link>
+      </div>
     </nav>
   );
 }
@@ -251,7 +264,7 @@ function Nav({ signedIn }: { signedIn: boolean }) {
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
     <div
-      className={`rounded-2xl border border-white/12 bg-white/95 p-4 shadow-[0_24px_60px_-20px_rgba(3,20,40,0.65)] backdrop-blur ${className}`}
+      className={`band-card rounded-xl p-4 ${className}`}
     >
       {children}
     </div>
@@ -274,7 +287,7 @@ function ThreadCard() {
           time instead?
         </p>
       </div>
-      <p className="mt-3 border-t border-m-rule pt-2 font-mono text-[10px] text-m-ink-3">
+      <p className="num mt-3 border-t border-m-rule pt-2 text-[10px] text-m-ink-3">
         answered from · &ldquo;Do you take walk-ins?&rdquo; v2
       </p>
     </Card>
@@ -287,7 +300,7 @@ function ApprovalCard() {
       <div className="flex items-center justify-between">
         <p className={`${eyebrow} text-m-ink-3`}>Waiting for you</p>
         <span
-          className="rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold"
+          className="num rounded px-1.5 py-0.5 text-[10px] font-semibold"
           style={{ color: "var(--warn)", border: "1px solid color-mix(in srgb, var(--warn) 40%, transparent)" }}
         >
           draft
@@ -303,11 +316,11 @@ function ApprovalCard() {
       <div className="mt-3 flex items-center gap-2">
         <span
           className="rounded-full px-3 py-1 text-[11px] font-semibold"
-          style={{ background: "var(--lime)", color: "var(--lime-ink)" }}
+          style={{ background: "var(--spark)", color: "var(--spark-ink)" }}
         >
           Approve
         </span>
-        <span className="font-mono text-[10px] text-m-ink-3">handbook.pdf · p4</span>
+        <span className="num text-[10px] text-m-ink-3">handbook.pdf · p4</span>
       </div>
     </Card>
   );
@@ -329,18 +342,18 @@ function SlotsCard() {
         {slots.map((s) => (
           <span
             key={s.time}
-            className="rounded-md px-1 py-1.5 text-center font-mono text-[11px] tabular-nums"
+            className="num rounded-md px-1 py-1.5 text-center text-[11px]"
             style={
               s.taken
                 ? { background: "var(--m-surface-2)", color: "var(--m-ink-3)" }
-                : { background: "var(--lime)", color: "var(--lime-ink)", fontWeight: 600 }
+                : { background: "var(--spark)", color: "var(--spark-ink)", fontWeight: 600 }
             }
           >
             {s.time}
           </span>
         ))}
       </div>
-      <p className="mt-3 border-t border-m-rule pt-2 font-mono text-[10px] text-m-ink-3">
+      <p className="num mt-3 border-t border-m-rule pt-2 text-[10px] text-m-ink-3">
         held before it&apos;s promised
       </p>
     </Card>
@@ -485,7 +498,7 @@ function Approval() {
                   <span
                     aria-hidden
                     className="mt-2 h-px w-6 shrink-0"
-                    style={{ background: "var(--lime)" }}
+                    style={{ background: "var(--spark)" }}
                   />
                   <div>
                     <dt className="font-display text-[15px] font-semibold">{term}</dt>
@@ -578,17 +591,17 @@ function Numbers() {
       <div className="mx-auto max-w-6xl px-6">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {/* The one number worth staring at gets the loud colour. */}
-          <div className="rounded-2xl p-7 lg:row-span-1" style={{ background: "var(--lime)" }}>
-            <p className={statLabel} style={{ color: "var(--lime-ink)", opacity: 0.7 }}>
+          <div className="rounded-2xl p-7 lg:row-span-1" style={{ background: "var(--spark)" }}>
+            <p className={statLabel} style={{ color: "var(--spark-ink)", opacity: 0.7 }}>
               Assertions
             </p>
             <p
               className="mt-3 font-display text-5xl font-semibold tracking-tight tabular-nums"
-              style={{ color: "var(--lime-ink)" }}
+              style={{ color: "var(--spark-ink)" }}
             >
               217
             </p>
-            <p className="mt-3 text-[13px] leading-relaxed" style={{ color: "var(--lime-ink)", opacity: 0.8 }}>
+            <p className="mt-3 text-[13px] leading-relaxed" style={{ color: "var(--spark-ink)", opacity: 0.8 }}>
               Run against a live database — tenant isolation, double-booking, DST, the approval gate.
             </p>
           </div>

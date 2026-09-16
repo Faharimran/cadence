@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { requireUser, asTenant, can } from "@/lib/auth/guard";
 import { describeInstant } from "@/lib/engine/time";
 import { KINDS, type ImportKind } from "@/lib/imports/fields";
 import { syncNow, undoRun, pauseLink, disconnectLink } from "./actions";
 import { ConnectForm } from "./forms";
-import { Button, Empty, PageHeader, Pill, Section } from "../../ui";
+import { BackLink, Button, Empty, PageHeader, Pill, Section } from "../../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -44,12 +43,7 @@ export default async function ImportsPage() {
   return (
     <div className="flex flex-col gap-10">
       <div className="flex flex-col gap-2">
-        <Link
-          href="/admin/integration"
-          className="font-mono text-[11px] text-ink-3 hover:text-ink"
-        >
-          ← connecting other software
-        </Link>
+        <BackLink href="/admin/integration">connecting other software</BackLink>
         <PageHeader
           title="Bring in what you already have"
           lede="Point cadence at the spreadsheet you already keep. It reads it, and re-reads it every fifteen minutes, so the sheet stays the copy you edit."
@@ -63,14 +57,14 @@ export default async function ImportsPage() {
             {links.map((l) => {
               const kind = KINDS[l.kind as ImportKind];
               return (
-                <li key={l.id} className="rounded-2xl border border-line p-4">
+                <li key={l.id} className="rounded-2xl border border-rule p-4">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="text-sm font-semibold">{kind?.label ?? l.kind}</span>
                     {l.status === "active" && <Pill tone="ok">in sync</Pill>}
                     {l.status === "paused" && <Pill>paused</Pill>}
                     {l.status === "error" && <Pill tone="bad">cannot read it</Pill>}
                     {l.removeMissing && <Pill tone="warn">removes missing rows</Pill>}
-                    <span className="ml-auto font-mono text-[11px] text-ink-3">
+                    <span className="num ml-auto text-[11px] text-ink-3">
                       {l.lastSyncAt
                         ? `read ${describeInstant(l.lastSyncAt, user.tenantTimezone)}`
                         : "not read yet"}
@@ -87,7 +81,7 @@ export default async function ImportsPage() {
                   </a>
 
                   {l.lastError && (
-                    <p className="mt-3 max-w-[70ch] text-[13px]" style={{ color: "var(--bad)" }}>
+                    <p className="txt-bad mt-3 max-w-[70ch] text-[13px]">
                       {l.lastError}
                     </p>
                   )}
@@ -108,8 +102,7 @@ export default async function ImportsPage() {
                       <form action={disconnectLink.bind(null, l.id)}>
                         <button
                           type="submit"
-                          className="font-mono text-[11px] underline underline-offset-2"
-                          style={{ color: "var(--bad)" }}
+                          className="txt-bad text-[11px] underline underline-offset-2"
                         >
                           disconnect
                         </button>
@@ -144,15 +137,15 @@ export default async function ImportsPage() {
             {runs.map((r) => (
               <li
                 key={r.id}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-line px-4 py-3 text-sm"
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-rule px-4 py-3 text-sm"
               >
-                <span className="font-mono text-[11px] text-ink-3">
+                <span className="num text-[11px] text-ink-3">
                   {describeInstant(r.startedAt, user.tenantTimezone)}
                 </span>
-                <span className="font-mono text-[11px] text-ink-3">{r.trigger}</span>
+                <span className="num text-[11px] text-ink-3">{r.trigger}</span>
 
                 {r.status === "failed" ? (
-                  <span style={{ color: "var(--bad)" }}>{r.error}</span>
+                  <span className="txt-bad">{r.error}</span>
                 ) : r.status === "reverted" ? (
                   <Pill>undone</Pill>
                 ) : (
@@ -175,7 +168,7 @@ export default async function ImportsPage() {
                       {(r.issues as { row: number; column?: string; problem: string }[]).map(
                         (issue, i) => (
                           <li key={i} className="text-[12px] text-ink-2">
-                            <span className="font-mono text-ink-3">
+                            <span className="text-ink-3">
                               row {issue.row}
                               {issue.column ? ` · ${issue.column}` : ""}
                             </span>{" "}
@@ -195,8 +188,7 @@ export default async function ImportsPage() {
                     <form action={undoRun.bind(null, r.id)} className="ml-auto">
                       <button
                         type="submit"
-                        className="font-mono text-[11px] underline underline-offset-2 hover:opacity-70"
-                        style={{ color: "var(--bad)" }}
+                        className="txt-bad text-[11px] underline underline-offset-2 hover:opacity-70"
                       >
                         undo this
                       </button>

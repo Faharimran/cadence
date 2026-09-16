@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth/guard";
+import { readTheme } from "@/lib/theme";
+import { ThemeCorner } from "@/app/ThemeToggle";
 import { env } from "@/lib/env";
 import { signIn } from "./actions";
 
@@ -17,22 +19,24 @@ export default async function SignInPage({
   if (await currentUser()) redirect("/admin");
 
   const { error, next } = await searchParams;
+  const theme = await readTheme();
 
   return (
     <main className="flex min-h-screen items-center justify-center px-6 py-16">
+      <ThemeCorner initial={theme} />
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col gap-1">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-3">
+          <span className="eyebrow">
             cadence
           </span>
-          <h1 className="font-mono text-2xl font-semibold tracking-tight">Sign in</h1>
+          <h1 className="num text-[22px] font-semibold">Sign in</h1>
         </div>
 
         <form action={signIn} className="flex flex-col gap-4">
           <input type="hidden" name="next" value={next ?? "/admin"} />
 
           <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-3">
+            <span className="eyebrow">
               Email
             </span>
             <input
@@ -41,12 +45,12 @@ export default async function SignInPage({
               autoComplete="username"
               required
               autoFocus
-              className="rounded-md border border-rule bg-surface px-3 py-2 text-sm outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30"
+              className="input"
             />
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-3">
+            <span className="eyebrow">
               Password
             </span>
             <input
@@ -54,15 +58,14 @@ export default async function SignInPage({
               type="password"
               autoComplete="current-password"
               required
-              className="rounded-md border border-rule bg-surface px-3 py-2 text-sm outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30"
+              className="input"
             />
           </label>
 
           {error && (
             <p
               role="alert"
-              className="rounded-md border border-bad/40 px-3 py-2 text-sm"
-              style={{ color: "var(--bad)" }}
+              className="txt-bad rounded-md border border-bad/40 px-3 py-2 text-sm"
             >
               {error}
             </p>
@@ -70,7 +73,7 @@ export default async function SignInPage({
 
           <button
             type="submit"
-            className="mt-1 rounded-md bg-accent px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="btn btn-primary mt-1"
           >
             Sign in
           </button>

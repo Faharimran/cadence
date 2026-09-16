@@ -41,7 +41,7 @@ export function CopyBox({ label, value }: { label?: string; value: string }) {
   return (
     <div className="flex flex-col gap-1">
       {label && (
-        <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-3">{label}</span>
+        <span className="eyebrow">{label}</span>
       )}
       <div className="flex items-stretch gap-2">
         <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-xl border border-rule bg-surface-2 px-3 py-2 font-mono text-[12px]">

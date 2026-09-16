@@ -52,17 +52,17 @@ export default async function ServicesPage() {
 
               return (
                 <Row key={s.id}>
-                  <span className="font-mono text-sm font-semibold">{s.name}</span>
+                  <span className="num text-sm font-semibold">{s.name}</span>
                   {s.category && <Pill>{s.category}</Pill>}
 
-                  <span className="font-mono text-xs tabular-nums">
+                  <span className="num text-xs">
                     {s.durationMinutes} min
                     {occupies !== s.durationMinutes && (
                       <span className="text-ink-3"> ({occupies} incl. buffers)</span>
                     )}
                   </span>
 
-                  <span className="font-mono text-xs tabular-nums">
+                  <span className="num text-xs">
                     {price ?? <span className="text-ink-3">on request</span>}
                   </span>
 
@@ -76,7 +76,7 @@ export default async function ServicesPage() {
                   {s.requirements.length === 0 && <Pill tone="warn">no requirements</Pill>}
                   {!s.active && <Pill tone="bad">inactive</Pill>}
 
-                  <span className="font-mono text-[11px] text-ink-3">
+                  <span className="num text-[11px] text-ink-3">
                     {s.requirements
                       .map(
                         (r) =>

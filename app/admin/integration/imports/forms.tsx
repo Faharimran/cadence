@@ -8,13 +8,13 @@ import { KINDS, fieldsFor } from "@/lib/imports/fields";
 function Feedback({ state }: { state: ImportFormState }) {
   if (state && "error" in state && state.error)
     return (
-      <p role="alert" className="max-w-[70ch] text-sm" style={{ color: "var(--bad)" }}>
+      <p role="alert" className="txt-bad max-w-[70ch] text-sm">
         {state.error}
       </p>
     );
   if (state && "ok" in state && state.ok)
     return (
-      <p role="status" className="text-sm" style={{ color: "var(--ok)" }}>
+      <p role="status" className="txt-good text-sm">
         {state.ok}
       </p>
     );
@@ -58,7 +58,7 @@ export function ConnectForm() {
         </select>
       </Field>
 
-      <div className="rounded-2xl border border-line bg-surface-2 p-4">
+      <div className="rounded-2xl border border-rule bg-surface-2 p-4">
         <p className={labelClass}>Before you paste it</p>
         <p className="mt-2 max-w-[70ch] text-[13px] leading-relaxed text-ink-2">
           In Google Sheets press <strong>Share</strong>, then under <em>General access</em> choose{" "}
@@ -102,7 +102,7 @@ function MappingForm({
         <span className="text-sm font-semibold">
           {preview.rowCount.toLocaleString()} rows, {preview.headers.length} columns
         </span>
-        <span className="font-mono text-[11px] text-ink-3">
+        <span className="num text-[11px] text-ink-3">
           {preview.source === "model"
             ? "columns matched automatically — check them below"
             : "matched on column names — check them below"}
@@ -127,10 +127,10 @@ function MappingForm({
       )}
 
       {/* Their own data, above the controls. */}
-      <div className="overflow-x-auto rounded-2xl border border-line">
+      <div className="overflow-x-auto rounded-2xl border border-rule">
         <table className="w-full min-w-[40rem] border-collapse text-left text-[12px]">
           <thead>
-            <tr className="border-b border-line bg-surface-2">
+            <tr className="border-b border-rule bg-surface-2">
               {preview.headers.map((h) => (
                 <th key={h} className="px-3 py-2 font-mono text-[11px] font-semibold text-ink-2">
                   {h}
@@ -140,7 +140,7 @@ function MappingForm({
           </thead>
           <tbody>
             {preview.sample.map((row, i) => (
-              <tr key={i} className="border-b border-line last:border-0">
+              <tr key={i} className="border-b border-rule last:border-0">
                 {preview.headers.map((h) => (
                   <td key={h} className="whitespace-nowrap px-3 py-2 text-ink-2">
                     {row[h] || <span className="text-ink-3">—</span>}
@@ -180,7 +180,7 @@ function MappingForm({
                 ))}
               </select>
               {doubt && (
-                <span className="text-[11px]" style={{ color: "var(--warn)" }}>
+                <span className="txt-warn text-[11px]">
                   {doubt.note}
                 </span>
               )}

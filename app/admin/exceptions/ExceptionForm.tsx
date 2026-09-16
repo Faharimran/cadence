@@ -15,8 +15,8 @@ import { createException, type ExceptionFormState } from "./actions";
 type Option = { id: string; label: string; hint?: string };
 
 const field =
-  "rounded-md border border-rule bg-surface px-3 py-2 text-sm outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30";
-const labelCls = "font-mono text-[11px] uppercase tracking-[0.12em] text-ink-3";
+  "input";
+const labelCls = "eyebrow";
 
 export function ExceptionForm({
   types,
@@ -125,7 +125,7 @@ export function ExceptionForm({
           className="flex flex-col gap-2 rounded-md border px-3 py-2.5 text-sm"
           style={{ borderColor: "color-mix(in srgb, var(--bad) 40%, transparent)" }}
         >
-          <span style={{ color: "var(--bad)" }}>{state.error}</span>
+          <span className="txt-bad">{state.error}</span>
 
           {state.clashes && state.clashes.length > 0 && (
             <ul className="flex flex-col gap-1 font-mono text-[11px] text-ink-2">
@@ -148,7 +148,7 @@ export function ExceptionForm({
       )}
 
       {state?.ok && (
-        <p role="status" className="text-sm" style={{ color: "var(--ok)" }}>
+        <p role="status" className="txt-good text-sm">
           Recorded. Those times are no longer bookable.
         </p>
       )}
@@ -156,7 +156,7 @@ export function ExceptionForm({
       <button
         type="submit"
         disabled={pending}
-        className="self-start rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="btn btn-primary"
       >
         {pending ? "Recording…" : "Record it"}
       </button>

@@ -46,10 +46,10 @@ export default async function AdminHome() {
   return (
     <div className="flex flex-col gap-8">
       <header className="flex flex-col gap-1">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-3">
+        <span className="eyebrow">
           {describeInstant(now, user.tenantTimezone)} · {user.tenantTimezone}
         </span>
-        <h1 className="font-mono text-xl font-semibold tracking-tight">
+        <h1 className="text-[19px] font-semibold text-ink">
           {user.name ? `Morning, ${user.name.split(" ")[0]}` : user.tenantName}
         </h1>
       </header>
@@ -68,7 +68,7 @@ export default async function AdminHome() {
       </dl>
 
       <section className="flex flex-col gap-3">
-        <h2 className="border-b border-rule pb-2 font-mono text-xs font-semibold uppercase tracking-[0.13em] text-accent">
+        <h2 className="border-b border-rule pb-1.5 text-[15px] font-semibold text-ink">
           Next 24 hours
         </h2>
 
@@ -81,12 +81,12 @@ export default async function AdminHome() {
                 key={b.id}
                 className="flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-lg border border-rule bg-surface px-4 py-3"
               >
-                <span className="font-mono text-sm font-semibold tabular-nums">
+                <span className="num text-sm font-semibold">
                   {describeInstant(b.startsAt, b.location.timezone)}
                 </span>
                 <span className="text-sm">{b.customer.name ?? b.customer.phone ?? "—"}</span>
                 <span className="text-sm text-ink-2">{b.service.name}</span>
-                <span className="ml-auto font-mono text-[11px] text-ink-3">
+                <span className="num ml-auto text-[11px] text-ink-3">
                   {b.location.name} · {b.resources.map((r) => r.resource.name).join(" + ")}
                 </span>
               </li>
@@ -119,11 +119,8 @@ function Stat({
 }) {
   const body = (
     <div className="flex flex-col gap-1 bg-surface p-4">
-      <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">{label}</dt>
-      <dd
-        className="font-mono text-2xl font-semibold tabular-nums"
-        style={urgent ? { color: "var(--warn)" } : undefined}
-      >
+      <dt className="eyebrow">{label}</dt>
+      <dd className={`num text-[22px] font-semibold ${urgent ? "txt-warn" : "text-ink"}`}>
         {value}
       </dd>
     </div>

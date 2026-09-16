@@ -40,13 +40,13 @@ export default async function ConversationPage({
     <div className="flex h-full min-h-0 flex-col">
       {/* ── Who, and who owns the thread ──────────────────────────── */}
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule px-5 py-3">
-        <span className="font-display text-[15px] font-semibold tracking-tight">
+        <span className="text-[15px] font-semibold text-ink">
           {conversation.customer.name ?? conversation.customer.phone ?? "Unknown"}
         </span>
 
         <LiveBadge lastInboundAt={conversation.lastInboundAt?.toISOString() ?? null} />
 
-        <span className="font-mono text-[11px] text-ink-3">
+        <span className="num text-[11px] text-ink-3">
           {conversation.channel}
           {conversation.customer.phone ? ` · ${conversation.customer.phone}` : ""}
         </span>
@@ -70,7 +70,7 @@ export default async function ConversationPage({
               className={`rounded-full px-4 py-1.5 text-[12px] font-semibold transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
                 conversation.botPaused
                   ? "border border-rule bg-surface text-ink"
-                  : "bg-accent text-white"
+                  : "bg-accent text-on-accent"
               }`}
             >
               {conversation.botPaused ? "Hand back to the assistant" : "Take over"}
@@ -104,27 +104,33 @@ export default async function ConversationPage({
               className={`flex flex-col gap-1 ${outbound ? "items-end" : "items-start"}`}
             >
               <div
-                className={`max-w-[68ch] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm ${
-                  outbound ? "rounded-br-sm text-white" : "rounded-bl-sm border border-rule bg-surface"
+                className={`max-w-[68ch] whitespace-pre-wrap rounded-xl px-3.5 py-2.5 text-sm ${
+                  outbound ? "rounded-br-sm" : "rounded-bl-sm border border-rule bg-surface"
                 }`}
                 // A colleague's message is visually distinct from the
                 // assistant's, because "did a person say this?" is the first
                 // question anyone reading back has.
+                //
+                // Both grounds carry their own ink rather than a literal white:
+                // the assistant's accent and the colleague's aqua are different
+                // colours in dark mode, and white sat on neither of them.
                 style={
                   outbound
-                    ? { background: byHuman ? "var(--ok)" : "var(--accent)" }
+                    ? byHuman
+                      ? { background: "var(--tag-aqua-fill)", color: "var(--tag-aqua-ink)" }
+                      : { background: "var(--accent)", color: "var(--on-accent)" }
                     : undefined
                 }
               >
                 {m.body}
               </div>
 
-              <span className="font-mono text-[10px] text-ink-3">
+              <span className="num text-[10px] text-ink-3">
                 {byHuman ? "a colleague" : m.author}
                 {" · "}
                 {describeInstant(m.createdAt, user.tenantTimezone)}
                 {m.status === "failed" && (
-                  <span style={{ color: "var(--bad)" }}> · not delivered</span>
+                  <span className="txt-bad"> · not delivered</span>
                 )}
                 {/* Which snapshot the assistant was reading when it said this —
                     how you tell stale data from a model error, weeks later. */}

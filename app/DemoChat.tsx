@@ -150,7 +150,7 @@ export default function DemoChat({
     <section id="demo" className="bg-m-paper pb-24">
       <div className="mx-auto max-w-6xl px-6">
         <div className="max-w-2xl">
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-m-ink-3 flex items-center gap-2">
+          <p className="eyebrow flex items-center gap-2 text-m-ink-3">
             <span
               aria-hidden
               className="inline-block size-1 rounded-full"
@@ -199,11 +199,11 @@ export default function DemoChat({
                     className="inline-block size-1.5 rounded-full"
                     style={{ background: selected ? "var(--signal)" : "var(--m-rule)" }}
                   />
-                  <span className="font-display text-[15px] font-semibold tracking-tight">
+                  <span className="text-[15px] font-semibold text-ink">
                     {persona.tab}
                   </span>
                 </span>
-                <span className="mt-2 block font-mono text-[11px] text-m-ink-3">
+                <span className="num mt-2 block text-[11px] text-m-ink-3">
                   {persona.trade}
                 </span>
                 <span className="mt-2 block text-[13px] leading-relaxed text-m-ink-2">
@@ -226,7 +226,7 @@ export default function DemoChat({
             </span>
             <div className="min-w-0">
               <p className="truncate text-[14px] font-semibold">{active.businessName}</p>
-              <p className="font-mono text-[10px] text-m-ink-3">
+              <p className="num text-[10px] text-m-ink-3">
                 {configured ? "assistant · live" : "assistant · offline"}
               </p>
             </div>
@@ -284,7 +284,7 @@ export default function DemoChat({
                       {message.tools.map((tool) => (
                         <span
                           key={tool}
-                          className="rounded border border-m-rule px-1.5 py-0.5 font-mono text-[10px] text-m-ink-3"
+                          className="num rounded border border-m-rule px-1.5 py-0.5 text-[10px] text-m-ink-3"
                         >
                           {TOOL_LABELS[tool] ?? tool}
                         </span>
@@ -296,7 +296,7 @@ export default function DemoChat({
             )}
 
             {pending && (
-              <p className="self-start rounded-2xl rounded-bl-sm bg-m-surface-2 px-3.5 py-2 font-mono text-[11px] text-m-ink-3">
+              <p className="self-start rounded-xl rounded-bl-sm bg-m-surface-2 px-3.5 py-2 text-[11px] text-m-ink-3">
                 thinking…
               </p>
             )}
@@ -365,14 +365,14 @@ export default function DemoChat({
               type="submit"
               disabled={pending || closed || !configured || draft.trim().length === 0}
               className="shrink-0 rounded-full px-4 py-2 text-[13px] font-semibold transition-transform hover:-translate-y-0.5 disabled:pointer-events-none disabled:opacity-40"
-              style={{ background: "var(--lime)", color: "var(--lime-ink)" }}
+              style={{ background: "var(--spark)", color: "var(--spark-ink)" }}
             >
               Send
             </button>
           </form>
         </div>
 
-        <p className="mt-3 font-mono text-[11px] leading-relaxed text-m-ink-3">
+        <p className="mt-3 text-[11px] leading-relaxed text-m-ink-3">
           Read-only: these three have no booking capability, so the assistant is handed no tool that
           writes. It will quote you a time and stop there.
         </p>

@@ -85,7 +85,7 @@ export default function AvailabilityLab() {
       <div className="grid gap-0 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
         {/* ── The layers ──────────────────────────────────────────── */}
         <div className="border-b border-m-rule p-6 lg:border-b-0 lg:border-r">
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-m-ink-3">
+          <p className="eyebrow text-m-ink-3">
             Saturday, one clinician
           </p>
           <p className="mt-3 text-[13px] leading-relaxed text-m-ink-2">
@@ -127,8 +127,8 @@ export default function AvailabilityLab() {
 
           <p className="mt-5 border-t border-m-rule pt-4 text-[12px] leading-relaxed text-m-ink-3">
             Businesses name their own exception types. What they cannot invent is the effect —{" "}
-            <span className="font-mono text-m-ink-2">add</span> and{" "}
-            <span className="font-mono text-m-ink-2">subtract</span> are a closed set the engine
+            <span className="text-m-ink-2">add</span> and{" "}
+            <span className="text-m-ink-2">subtract</span> are a closed set the engine
             owns.
           </p>
         </div>
@@ -136,10 +136,10 @@ export default function AvailabilityLab() {
         {/* ── The resulting day ───────────────────────────────────── */}
         <div className="p-6">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-m-ink-3">
+            <p className="eyebrow text-m-ink-3">
               Free right now
             </p>
-            <p aria-live="polite" className="font-mono text-[12px] tabular-nums text-m-ink-2">
+            <p aria-live="polite" className="num text-[12px] text-m-ink-2">
               {free.length} of {slots.filter((s) => s.state !== "closed").length} open
             </p>
           </div>
@@ -151,7 +151,7 @@ export default function AvailabilityLab() {
           </div>
 
           {/* The working. This is the section's whole claim in one line. */}
-          <p className="mt-5 flex flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-m-rule pt-4 font-mono text-[12px] tabular-nums text-m-ink-3">
+          <p className="num mt-5 flex flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-m-rule pt-4 text-[12px] text-m-ink-3">
             <Sum n={sums.open} label="open" />
             {sums.leave > 0 && (
               <>
@@ -190,7 +190,7 @@ export default function AvailabilityLab() {
                   onClick={runRace}
                   disabled={free.length === 0}
                   className="rounded-full px-4 py-2 text-[13px] font-semibold transition-transform hover:-translate-y-0.5 disabled:pointer-events-none disabled:opacity-40"
-                  style={{ background: "var(--lime)", color: "var(--lime-ink)" }}
+                  style={{ background: "var(--spark)", color: "var(--spark-ink)" }}
                 >
                   {free.length === 0
                     ? "Nothing left to race for"
@@ -263,11 +263,11 @@ function Layer({
     <>
       <span
         aria-hidden
-        className="grid size-6 shrink-0 place-items-center rounded-md font-mono text-[13px] font-semibold"
+        className="grid size-6 shrink-0 place-items-center rounded-md font-display text-[13px] font-semibold"
         style={
           on
             ? effect === "add"
-              ? { background: "var(--lime)", color: "var(--lime-ink)" }
+              ? { background: "var(--spark)", color: "var(--spark-ink)" }
               : { background: "var(--signal)", color: "#fff" }
             : { background: "var(--m-surface-2)", color: "var(--m-ink-3)" }
         }
@@ -287,7 +287,7 @@ function Layer({
     return (
       <div className="flex items-center gap-3 rounded-xl border border-m-rule bg-m-paper px-3 py-2.5">
         {body}
-        <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-m-ink-3">
+        <span className="eyebrow shrink-0 text-m-ink-3">
           always
         </span>
       </div>
@@ -330,7 +330,7 @@ function Slot({ time, state }: { time: string; state: SlotState }) {
       className="flex flex-col items-center gap-0.5 rounded-lg px-1 py-2 text-center transition-colors"
       style={
         free
-          ? { background: "var(--lime)", color: "var(--lime-ink)" }
+          ? { background: "var(--spark)", color: "var(--spark-ink)" }
           : held
             ? { background: "color-mix(in srgb, var(--signal) 14%, transparent)", color: "var(--signal)" }
             : { background: "var(--m-surface-2)", color: "var(--m-ink-3)" }
@@ -341,7 +341,7 @@ function Slot({ time, state }: { time: string; state: SlotState }) {
       </span>
       {/* Typed, never blank — the reason is the difference between "we're shut"
           and "that clinician is away". */}
-      <span className="font-mono text-[9.5px] uppercase tracking-wide opacity-80">
+      <span className="nav-heading opacity-80">
         {free ? "free" : STATE_LABEL[state]}
       </span>
     </span>
@@ -359,12 +359,12 @@ function Sum({ n, label }: { n: number; label: string }) {
 function Reply({ who, tone, text }: { who: string; tone: "won" | "lost"; text: string }) {
   return (
     <div>
-      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-m-ink-3">{who}</p>
+      <p className="eyebrow text-m-ink-3">{who}</p>
       <p
         className="mt-1.5 rounded-2xl rounded-bl-sm px-3.5 py-2 text-[13px] leading-snug"
         style={
           tone === "won"
-            ? { background: "var(--lime)", color: "var(--lime-ink)" }
+            ? { background: "var(--spark)", color: "var(--spark-ink)" }
             : { background: "var(--m-surface-2)", color: "var(--m-ink)" }
         }
       >

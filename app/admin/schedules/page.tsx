@@ -73,18 +73,18 @@ export default async function SchedulesPage() {
           <div className="flex flex-col gap-6">
             {[...byResource.entries()].map(([name, theirs]) => (
               <div key={name} className="flex flex-col gap-2">
-                <h3 className="font-mono text-sm font-semibold">{name}</h3>
+                <h3 className="num text-sm font-semibold">{name}</h3>
                 <ul className="flex flex-col gap-1.5">
                   {theirs.map((r) => (
                     <li
                       key={r.id}
                       className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-rule bg-surface px-4 py-2"
                     >
-                      <span className="w-24 font-mono text-xs">{weekdayName(r.weekday)}</span>
-                      <span className="font-mono text-sm tabular-nums">
+                      <span className="w-24 text-xs">{weekdayName(r.weekday)}</span>
+                      <span className="num text-sm">
                         {r.startTime} – {r.endTime}
                       </span>
-                      <span className="font-mono text-[11px] text-ink-3">
+                      <span className="num text-[11px] text-ink-3">
                         {r.location.name} · {r.slotMinutes}-minute slots
                       </span>
                       <form action={removeScheduleRule} className="ml-auto">

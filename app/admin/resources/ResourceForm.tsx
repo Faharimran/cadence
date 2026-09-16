@@ -52,12 +52,12 @@ export function ResourceForm({
       )}
 
       {state?.error && (
-        <p role="alert" className="text-sm" style={{ color: "var(--bad)" }}>
+        <p role="alert" className="txt-bad text-sm">
           {state.error}
         </p>
       )}
       {state?.ok && (
-        <p role="status" className="text-sm" style={{ color: "var(--ok)" }}>
+        <p role="status" className="txt-good text-sm">
           {state.ok}
         </p>
       )}

@@ -4,9 +4,9 @@ import { useActionState, useState } from "react";
 import { signUp, type SignUpState } from "./actions";
 
 const field =
-  "rounded-md border border-rule bg-surface px-3 py-2 text-sm outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/30";
+  "input";
 
-const label = "font-mono text-[11px] uppercase tracking-[0.12em] text-ink-3";
+const label = "eyebrow";
 
 export type PresetOption = { id: string; label: string; blurb: string };
 
@@ -120,8 +120,7 @@ export function SignUpForm({
       {state?.error && (
         <p
           role="alert"
-          className="rounded-md border border-bad/40 px-3 py-2 text-sm"
-          style={{ color: "var(--bad)" }}
+          className="txt-bad rounded-md border border-bad/40 px-3 py-2 text-sm"
         >
           {state.error}
         </p>
@@ -130,7 +129,7 @@ export function SignUpForm({
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="btn btn-primary"
       >
         {pending ? "Setting up…" : "Create the business"}
       </button>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { CardIcon, Industry } from "@/lib/marketing/industries";
 import { SELECT_DEMO_EVENT } from "@/lib/marketing/demoEvent";
+import { Icon as Glyph } from "./icons";
 
 /**
  * "Is it for a business like mine?"
@@ -39,7 +40,7 @@ export default function Industries({
     <section id="industries" className="bg-m-paper pb-24">
       <div className="mx-auto max-w-6xl px-6">
         <div className="mx-auto max-w-2xl text-center">
-          <p className="flex items-center justify-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-m-ink-3">
+          <p className="eyebrow flex items-center justify-center gap-2 text-m-ink-3">
             <span
               aria-hidden
               className="inline-block size-1 rounded-full"
@@ -138,8 +139,7 @@ export default function Industries({
                 }}
               >
                 <p
-                  className="font-mono text-[11px] uppercase tracking-[0.18em]"
-                  style={{ color: "var(--warn)" }}
+                  className="txt-warn eyebrow"
                 >
                   Never, without exception
                 </p>
@@ -162,10 +162,10 @@ export default function Industries({
                       );
                     }}
                     className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[13px] font-semibold transition-transform hover:-translate-y-0.5"
-                    style={{ background: "var(--lime)", color: "var(--lime-ink)" }}
+                    style={{ background: "var(--spark)", color: "var(--spark-ink)" }}
                   >
                     Talk to a {active.tab.toLowerCase()} agent
-                    <span aria-hidden>↓</span>
+                    <Glyph name="arrow-down" size={13} />
                   </a>
                 )}
                 <p className="font-mono text-[11px] leading-relaxed text-m-ink-3">

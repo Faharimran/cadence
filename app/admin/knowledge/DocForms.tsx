@@ -13,13 +13,13 @@ import { Button, Field, inputClass } from "../ui";
 function Feedback({ state }: { state: KnowledgeFormState }) {
   if (state?.error)
     return (
-      <p role="alert" className="text-sm" style={{ color: "var(--bad)" }}>
+      <p role="alert" className="txt-bad text-sm">
         {state.error}
       </p>
     );
   if (state?.ok)
     return (
-      <p role="status" className="text-sm" style={{ color: "var(--ok)" }}>
+      <p role="status" className="txt-good text-sm">
         {state.ok}
       </p>
     );
@@ -50,7 +50,7 @@ export function UploadForm() {
           name="file"
           accept="application/pdf,.pdf"
           required
-          className={`${inputClass} file:mr-3 file:rounded file:border-0 file:bg-accent file:px-3 file:py-1 file:text-sm file:text-white`}
+          className={`${inputClass} file:mr-3 file:rounded file:border-0 file:bg-accent file:px-3 file:py-1 file:text-sm file:text-on-accent`}
         />
       </Field>
 
@@ -62,7 +62,7 @@ export function UploadForm() {
       </p>
 
       <Feedback state={state} />
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" variant="plain" disabled={pending}>
         {pending ? "Uploading…" : "Upload and read it"}
       </Button>
     </form>
@@ -81,7 +81,7 @@ export function NewDocForm() {
 
   if (!open) {
     return (
-      <Button type="button" onClick={() => setOpen(true)}>
+      <Button type="button" variant="plain" onClick={() => setOpen(true)}>
         Write an article
       </Button>
     );
@@ -215,7 +215,7 @@ export function WebsiteForm() {
       </p>
 
       <Feedback state={state} />
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" variant="plain" disabled={pending}>
         {pending ? "Starting…" : "Read my website"}
       </Button>
     </form>

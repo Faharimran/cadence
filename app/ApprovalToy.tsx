@@ -54,17 +54,17 @@ export default function ApprovalToy() {
   }
 
   return (
-    <div className="rounded-3xl border border-white/12 bg-white/5 p-6 backdrop-blur sm:p-7">
+    <div className="band-panel rounded-2xl p-6 sm:p-7">
       {/* ── The article ─────────────────────────────────────────── */}
       <div className="flex items-center gap-3">
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-on-deep-3">
+        <p className="eyebrow text-on-deep-3">
           Your knowledge base
         </p>
         <span
-          className="ml-auto rounded px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider"
+          className="eyebrow ml-auto rounded px-2 py-0.5"
           style={
             status === "approved"
-              ? { color: "var(--lime)", border: "1px solid var(--lime)" }
+              ? { color: "var(--spark)", border: "1px solid var(--spark)" }
               : {
                   color: "var(--warn)",
                   border: "1px solid color-mix(in srgb, var(--warn) 45%, transparent)",
@@ -88,7 +88,7 @@ export default function ApprovalToy() {
         onChange={(event) => setDraft(event.target.value)}
         rows={3}
         maxLength={280}
-        className="mt-3 w-full resize-none rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5 text-[13px] leading-relaxed text-on-deep outline-none placeholder:text-on-deep-3 focus-visible:border-white/40"
+        className="band-field mt-3 w-full resize-none rounded-lg px-3.5 py-2.5 text-[13px] leading-relaxed"
         placeholder="Write what this business would actually say…"
       />
 
@@ -98,12 +98,12 @@ export default function ApprovalToy() {
           onClick={approve}
           disabled={!canApprove}
           className="rounded-full px-4 py-1.5 text-[13px] font-semibold transition-transform hover:-translate-y-0.5 disabled:pointer-events-none disabled:opacity-40"
-          style={{ background: "var(--lime)", color: "var(--lime-ink)" }}
+          style={{ background: "var(--spark)", color: "var(--spark-ink)" }}
         >
           {live === null ? "Approve" : `Approve as v${live.version + 1}`}
         </button>
 
-        <p aria-live="polite" className="font-mono text-[11px] text-on-deep-3">
+        <p aria-live="polite" className="num text-[11px] text-on-deep-3">
           {justApproved
             ? "approved — the assistant can quote it now"
             : live === null
@@ -115,8 +115,8 @@ export default function ApprovalToy() {
       </div>
 
       {/* ── What the customer gets, right now ───────────────────── */}
-      <div className="mt-6 border-t border-white/12 pt-5">
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-on-deep-3">
+      <div className="band-rule mt-6 border-t pt-5">
+        <p className="eyebrow text-on-deep-3">
           What a customer gets right now
         </p>
 
@@ -130,10 +130,10 @@ export default function ApprovalToy() {
 
           {/* The whole argument of the section, in one bubble that changes. */}
           <div className="max-w-[90%] self-start">
-            <p className="whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white/10 px-3.5 py-2 text-[13px] leading-snug text-on-deep">
+            <p className="band-panel whitespace-pre-wrap rounded-xl rounded-bl-sm px-3.5 py-2 text-[13px] leading-snug text-on-deep">
               {live === null ? NOT_KNOWN : live.text}
             </p>
-            <p className="mt-1.5 font-mono text-[10px] text-on-deep-3">
+            <p className="num mt-1.5 text-[10px] text-on-deep-3">
               {live === null
                 ? "answered from · nothing — it will not guess"
                 : `answered from · “${QUESTION}” v${live.version}`}

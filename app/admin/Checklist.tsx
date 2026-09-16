@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Readiness } from "@/lib/readiness";
+import { Icon } from "@/app/icons";
 
 /**
  * The setup checklist.
@@ -15,12 +16,12 @@ export function Checklist({ readiness }: { readiness: Readiness }) {
   if (canTakeBookings && outstanding.length === 0) return null;
 
   return (
-    <section className="flex flex-col gap-4 rounded-lg border border-rule bg-surface p-5">
+    <section className="card flex flex-col gap-3 p-4">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="font-mono text-sm font-semibold">
+        <h2 className="text-[15px] font-semibold text-ink">
           {canTakeBookings ? "A few things left" : "Finish setting up"}
         </h2>
-        <span className="font-mono text-[11px] text-ink-3">
+        <span className="num text-[11px] text-ink-3">
           {doneCount} of {requiredCount} essentials done
         </span>
       </div>
@@ -34,19 +35,20 @@ export function Checklist({ readiness }: { readiness: Readiness }) {
       <ol className="flex flex-col gap-1.5">
         {steps.map((step) => (
           <li key={step.id} className="flex items-start gap-3">
-            <span
-              aria-hidden
-              className="mt-0.5 font-mono text-sm"
-              style={{ color: step.done ? "var(--ok)" : "var(--ink-3)" }}
-            >
-              {step.done ? "✓" : "○"}
-            </span>
+            {/* Drawn, not typed. ✓ and ○ are two of the characters that render
+                as a coloured emoji on some platforms and a hairline on others,
+                so a list of them is a list in two different weights. */}
+            <Icon
+              name={step.done ? "check" : "circle"}
+              size={14}
+              className={`mt-[3px] shrink-0 ${step.done ? "txt-good" : "text-ink-faint"}`}
+            />
 
             <div className="flex flex-col gap-0.5">
               <span className="flex flex-wrap items-baseline gap-2 text-sm">
                 <span className={step.done ? "text-ink-3 line-through" : ""}>{step.title}</span>
                 {!step.required && !step.done && (
-                  <span className="font-mono text-[10px] text-ink-3">optional</span>
+                  <span className="eyebrow">optional</span>
                 )}
               </span>
 

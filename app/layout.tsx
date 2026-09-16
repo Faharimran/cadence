@@ -1,19 +1,27 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque } from "next/font/google";
+import { Plus_Jakarta_Sans, Playfair_Display } from "next/font/google";
 import { readTheme, themeAttribute } from "@/lib/theme";
 import "./globals.css";
 
 /**
- * One display face, variable, used only for headlines.
+ * Two families. Not three.
  *
- * Bricolage rather than one of the obvious grotesques: it carries enough width
- * and contrast to hold a large headline without reading like every other
- * software landing page, and it stays legible set tight. Body text stays on the
- * system stack — a second webfont costs more than it returns on a page this
- * short, and the system stack is what the admin already uses, so the two
- * surfaces stay related.
+ * Plus Jakarta Sans carries the entire interface — every label, every table
+ * cell, every number. It is a geometric sans with enough width at 13px to stay
+ * legible in a dense table, which is the size most of this product is read at.
+ *
+ * Playfair is for the logotype and display headlines only, and is loaded at
+ * three weights for that reason. Every extra face is another render-blocking
+ * request for something no reader can name.
  */
-const display = Bricolage_Grotesque({
+const interfaceFont = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-interface",
+  weight: ["400", "500", "600", "700"],
+});
+
+const display = Playfair_Display({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-display",
@@ -33,7 +41,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const theme = await readTheme();
 
   return (
-    <html lang="en" className={`h-full ${display.variable}`} {...themeAttribute(theme)}>
+    <html
+      lang="en"
+      className={`h-full ${interfaceFont.variable} ${display.variable}`}
+      {...themeAttribute(theme)}
+    >
       <body className="min-h-full antialiased">{children}</body>
     </html>
   );

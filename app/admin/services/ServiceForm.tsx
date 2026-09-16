@@ -59,7 +59,7 @@ export function ServiceForm({ currency }: { currency: string }) {
       </div>
 
       <fieldset className="flex flex-col gap-3 rounded-md border border-rule p-4">
-        <legend className="px-1 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-3">
+        <legend className="eyebrow px-1">
           What it needs
         </legend>
         <div className="grid gap-4 sm:grid-cols-3">
@@ -103,12 +103,12 @@ export function ServiceForm({ currency }: { currency: string }) {
       </label>
 
       {state?.error && (
-        <p role="alert" className="text-sm" style={{ color: "var(--bad)" }}>
+        <p role="alert" className="txt-bad text-sm">
           {state.error}
         </p>
       )}
       {state?.ok && (
-        <p role="status" className="text-sm" style={{ color: "var(--ok)" }}>
+        <p role="status" className="txt-good text-sm">
           {state.ok}
         </p>
       )}

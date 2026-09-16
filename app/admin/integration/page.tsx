@@ -77,7 +77,7 @@ export default async function IntegrationPage() {
         </p>
         <Link
           href="/admin/integration/imports"
-          className="mt-4 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="btn btn-primary mt-4"
         >
           Bring in what you already have
         </Link>
@@ -87,7 +87,7 @@ export default async function IntegrationPage() {
 
       {/* Everything below is the developer surface, folded away by default. */}
       <details className="flex flex-col gap-10 [&[open]>summary]:mb-2">
-        <summary className="cursor-pointer font-mono text-xs font-semibold uppercase tracking-[0.13em] text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+        <summary className="cursor-pointer text-[13px] font-semibold text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
           I run my own software — show me the technical setup
         </summary>
 
@@ -111,10 +111,10 @@ export default async function IntegrationPage() {
           <ul className="flex flex-col gap-2">
             {keys.map((k) => (
               <Row key={k.id}>
-                <span className="font-mono text-sm font-semibold">{k.name}</span>
-                <code className="font-mono text-xs text-ink-2">{k.prefix}.•••</code>
-                <span className="font-mono text-[11px] text-ink-3">{k.scopes.join(", ")}</span>
-                <span className="font-mono text-[11px] text-ink-3">
+                <span className="num text-sm font-semibold">{k.name}</span>
+                <code className="num text-xs text-ink-2">{k.prefix}.•••</code>
+                <span className="num text-[11px] text-ink-3">{k.scopes.join(", ")}</span>
+                <span className="num text-[11px] text-ink-3">
                   {k.lastUsedAt
                     ? `last used ${describeInstant(k.lastUsedAt, user.tenantTimezone)}`
                     : "never used"}
@@ -152,12 +152,12 @@ export default async function IntegrationPage() {
             {endpoints.map((e) => (
               <Row key={e.id}>
                 <code className="font-mono text-xs">{e.url}</code>
-                <span className="font-mono text-[11px] text-ink-3">
+                <span className="num text-[11px] text-ink-3">
                   {e.events.length === 0 ? "all events" : e.events.join(", ")}
                 </span>
                 {!e.active && <Pill tone="bad">off</Pill>}
                 {e.disabledReason && (
-                  <span className="max-w-[46ch] text-[11px]" style={{ color: "var(--bad)" }}>
+                  <span className="txt-bad max-w-[46ch] text-[11px]">
                     {e.disabledReason}
                   </span>
                 )}
@@ -203,7 +203,7 @@ export default async function IntegrationPage() {
                   {d.attempts} attempt{d.attempts === 1 ? "" : "s"}
                 </span>
                 {d.lastError && (
-                  <span className="max-w-[40ch] truncate" style={{ color: "var(--bad)" }}>
+                  <span className="txt-bad max-w-[40ch] truncate">
                     {d.lastError}
                   </span>
                 )}
@@ -288,7 +288,7 @@ curl -X POST ${env.CADENCE_BASE_URL}/api/v1/holds \\
           second booking.
         </p>
 
-        <h3 className="mt-2 font-mono text-xs font-semibold uppercase tracking-[0.13em] text-ink-3">
+        <h3 className="eyebrow mt-2">
           Verifying a webhook
         </h3>
         <pre className="overflow-x-auto rounded-lg border border-rule bg-surface p-4 font-mono text-xs leading-relaxed text-ink-2">

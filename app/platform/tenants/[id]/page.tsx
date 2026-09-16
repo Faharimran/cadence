@@ -1,9 +1,8 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOperator } from "@/lib/platform/guard";
 import { loadTenantDetail } from "@/lib/platform/metrics";
 import { setTenantStatus } from "../../actions";
-import { Button, Empty, PageHeader, Pill, Row, Section } from "../../../admin/ui";
+import { BackLink, Button, Empty, PageHeader, Pill, Row, Section } from "../../../admin/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -36,9 +35,7 @@ export default async function TenantDetailPage({
   return (
     <div className="flex flex-col gap-10">
       <div className="flex flex-col gap-2">
-        <Link href="/platform" className="font-mono text-[11px] text-ink-3 hover:text-ink">
-          ← every business
-        </Link>
+        <BackLink href="/platform">every business</BackLink>
         <PageHeader
           title={tenant.name}
           lede={`${tenant.slug} · ${tenant.timezone} · ${tenant.currency}${tenant.vertical ? ` · started from the ${tenant.vertical} preset` : ""}`}
@@ -46,7 +43,7 @@ export default async function TenantDetailPage({
         <div className="flex flex-wrap items-center gap-2">
           {tenant.status === "active" ? <Pill tone="ok">active</Pill> : <Pill tone="bad">{tenant.status}</Pill>}
           {ready ? <Pill tone="ok">can take bookings</Pill> : <Pill tone="bad">set-up unfinished</Pill>}
-          <span className="font-mono text-[11px] text-ink-3">
+          <span className="num text-[11px] text-ink-3">
             joined {tenant.createdAt.toISOString().slice(0, 10)}
           </span>
         </div>
@@ -82,7 +79,7 @@ export default async function TenantDetailPage({
           <Metric label="Opening-hours rules" value={setup.rules} />
         </div>
         {!ready && (
-          <p className="text-sm" style={{ color: "var(--bad)" }}>
+          <p className="txt-bad text-sm">
             Without a location, a service and opening hours there is no time to offer, so the
             assistant cannot book anything.
           </p>
@@ -97,7 +94,7 @@ export default async function TenantDetailPage({
           <Metric label="Retired" value={knowledge.archived} />
         </div>
         {knowledge.approved === 0 && (
-          <p className="text-sm" style={{ color: "var(--warn)" }}>
+          <p className="txt-warn text-sm">
             Nothing approved, so every question about how anything works goes to a colleague.
           </p>
         )}
@@ -113,7 +110,7 @@ export default async function TenantDetailPage({
                 ) : (
                   <Pill tone="ok">{s.status}</Pill>
                 )}
-                <span className="ml-auto font-mono text-[11px] text-ink-3">
+                <span className="num ml-auto text-[11px] text-ink-3">
                   {s.createdAt.toISOString().slice(0, 10)}
                 </span>
               </Row>
@@ -126,7 +123,7 @@ export default async function TenantDetailPage({
       <Section title="Connections">
         <ul className="flex flex-col gap-2">
           <Row>
-            <span className="font-mono text-sm font-semibold">WhatsApp</span>
+            <span className="num text-sm font-semibold">WhatsApp</span>
             {channel ? (
               <>
                 {channel.active && channel.hasToken ? (
@@ -134,7 +131,7 @@ export default async function TenantDetailPage({
                 ) : (
                   <Pill tone="warn">incomplete</Pill>
                 )}
-                <span className="font-mono text-xs text-ink-2">
+                <span className="num text-xs text-ink-2">
                   {channel.displayNumber ?? "number not set"}
                 </span>
               </>
@@ -145,22 +142,22 @@ export default async function TenantDetailPage({
 
           {endpoints.map((e) => (
             <Row key={e.id}>
-              <span className="font-mono text-sm font-semibold">Webhook</span>
-              <span className="font-mono text-xs text-ink-2">{e.host}</span>
+              <span className="num text-sm font-semibold">Webhook</span>
+              <span className="num text-xs text-ink-2">{e.host}</span>
               {e.active ? <Pill tone="ok">on</Pill> : <Pill tone="bad">switched off</Pill>}
               {e.disabledReason && (
                 <span className="text-xs text-ink-2">{e.disabledReason}</span>
               )}
-              <span className="ml-auto font-mono text-[11px] text-ink-3">
+              <span className="num ml-auto text-[11px] text-ink-3">
                 {e.events.length} event{e.events.length === 1 ? "" : "s"}
               </span>
             </Row>
           ))}
 
           <Row>
-            <span className="font-mono text-sm font-semibold">API keys</span>
-            <span className="font-mono text-xs text-ink-2">{apiKeys} live</span>
-            <span className="ml-auto font-mono text-[11px] text-ink-3">
+            <span className="num text-sm font-semibold">API keys</span>
+            <span className="num text-xs text-ink-2">{apiKeys} live</span>
+            <span className="num ml-auto text-[11px] text-ink-3">
               {failedDeliveries} failed deliveries all-time
             </span>
           </Row>
@@ -177,7 +174,7 @@ export default async function TenantDetailPage({
           {capabilities.map((c) => (
             <span
               key={c.capability}
-              className="rounded-full border border-rule bg-surface px-3 py-1 font-mono text-[11px]"
+              className="chip"
             >
               {c.capability}
               <span className="text-ink-3">
@@ -198,7 +195,7 @@ export default async function TenantDetailPage({
               <span className="font-mono text-sm">{u.email}</span>
               <Pill>{u.role}</Pill>
               {!u.active && <Pill tone="bad">disabled</Pill>}
-              <span className="ml-auto font-mono text-[11px] text-ink-3">
+              <span className="num ml-auto text-[11px] text-ink-3">
                 {u.lastLoginAt ? `last in ${u.lastLoginAt.toISOString().slice(0, 10)}` : "never signed in"}
               </span>
             </Row>
@@ -215,8 +212,8 @@ export default async function TenantDetailPage({
             {recentAudit.map((a) => (
               <Row key={a.id}>
                 <span className="font-mono text-xs">{a.action}</span>
-                <span className="font-mono text-[11px] text-ink-3">{a.actor}</span>
-                <span className="ml-auto font-mono text-[11px] text-ink-3">
+                <span className="num text-[11px] text-ink-3">{a.actor}</span>
+                <span className="num ml-auto text-[11px] text-ink-3">
                   {a.createdAt.toISOString().slice(0, 16).replace("T", " ")}
                 </span>
               </Row>
@@ -255,8 +252,8 @@ export default async function TenantDetailPage({
 function Metric({ label, value, note }: { label: string; value: number | string; note?: string }) {
   return (
     <div className="rounded-lg border border-rule bg-surface p-4">
-      <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-3">{label}</p>
-      <p className="mt-2 font-mono text-2xl font-semibold tabular-nums">{value}</p>
+      <p className="eyebrow">{label}</p>
+      <p className="num mt-2 text-[22px] font-semibold">{value}</p>
       {note && <p className="mt-1 text-[11px] text-ink-3">{note}</p>}
     </div>
   );

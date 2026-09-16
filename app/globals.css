@@ -1,128 +1,300 @@
 @import "tailwindcss";
 
-/* ───────────────────────────────────────────────────────────────────────
-   cadence tokens.
-   Cool blue-slate neutrals with a signal-blue accent. The four state hues
-   (open / blocked / override / busy) are SEMANTIC and deliberately separate
-   from the accent — they carry meaning in the schedule grid, so they must
-   not be reused for decoration.
-   ─────────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   cadence tokens — built to docs/ui-reference.md.
+
+   Five rules run through this file, and everything below follows from them:
+
+     1. Colour lives in tokens, never in components.
+     2. Status needs three channels — a fill, an ink and a drawn glyph.
+     3. One accent, used rarely.
+     4. No emoji. Icons are inline SVG (app/icons.tsx).
+     5. Contrast is measured: 4.5:1 body, 3:1 large text and boundaries.
+
+   The token NAMES are the reference's. The older names this codebase already
+   uses (--paper, --surface-2, --ink-2 …) are kept as aliases immediately below
+   the set they point at, so the fifty files that reference them get the new
+   palette without fifty edits — and so a component never has to know which
+   generation of the name it is using.
+   ═══════════════════════════════════════════════════════════════════════ */
+
 :root {
-  --paper: #f2f5f8;
-  --surface: #ffffff;
-  --surface-2: #e7ecf2;
-  --rule: #c8d2de;
-  --ink: #16202b;
-  --ink-2: #4a5a6b;
-  --ink-3: #7488a0;
-  --accent: #2563c9;
-  --ok: #1f8a5f;
-  --warn: #b4700f;
-  --bad: #b4453c;
+  /* Surfaces: a near-white ground with white cards on it. The tonal step
+     between them is what separates a card from the page — no shadow needed. */
+  --surface-page: #f5f6f8;
+  --surface-card: #ffffff;
+  --surface-sunken: #eef0f4;
+
+  /* Rules. Hairlines; the ground does most of the separating. */
+  --rule: #e6e8ee;
+  --rule-strong: #d2d6e0;
+  --rule-soft: #eff1f5;
+
+  /* Ink */
+  --ink: #14161d;
+  --ink-soft: #363b47;
+  --ink-muted: #6b7280;
+  --ink-faint: #9aa1ad;
+
+  /* Accent — one colour, used sparingly. White measures 5.65:1 against it, so
+     it can fill a button and still carry white text. */
+  --accent: #3358e8;
+  --accent-deep: #2a46c4;
+  --accent-wash: #e8edfd;
+  --accent-light: #7f9bf2;
+  /* What goes ON the accent. White measures 5.65:1 against the light accent and
+     2.5:1 against the dark one, so this cannot be a literal: a filled button in
+     dark mode was failing the same contrast rule the palette was chosen for. */
+  --on-accent: #ffffff;
+
+  /* Radius — tight. Larger radii read as consumer software. */
+  --r-sm: 8px;
+  --r: 10px;
+  --r-lg: 14px;
+  --pill: 999px;
+
+  /* Charts. The many sit back; only the mark that matters is saturated. */
+  --viz-bar: #97aef2;
+  --viz-bar-peak: #3358e8;
+  --viz-grid: var(--rule);
+  --viz-seq-1: #2440b8;
+  --viz-seq-2: #3358e8;
+  --viz-seq-3: #6b8af0;
+  --viz-seq-4: #a5b9f7;
+  --viz-seq-5: #d8e1fc;
+
+  /* ── Aliases for the names already in use across the app ──────────── */
+  --paper: var(--surface-page);
+  --surface: var(--surface-card);
+  --surface-2: var(--surface-sunken);
+  --ink-2: var(--ink-soft);
+  --ink-3: var(--ink-muted);
+
+  /* Semantic text. Same hues as the status tags on purpose: a failure in a
+     sentence and a failure in a badge must not be two different reds. */
+  --ok: #14714c;
+  --warn: #9a4c08;
+  --bad: #a93317;
 }
 
-/* ───────────────────────────────────────────────────────────────────────
-   Shell.
+/* ═══════════════════════════════════════════════════════════════════════
+   Status tags — the heart of the system.
 
-   The signed-in surfaces sit under a coloured band with the working area as a
-   white sheet lifted into it. The colour is what tells you which door you came
-   through, so the two shells are deliberately far apart: the tenant admin is
-   blue and friendly, the operator console is near-black. Someone who can open
-   both should never have to read the header to know where they are.
+   Badges answer different questions (is it held, has this person opted out,
+   does it need a human), and one hue cannot give four answers. These eight
+   were measured: the worst adjacent pair clears ΔE 15 for normal vision and
+   for the worst colour-blind pairing. Narrowing the palette means re-measuring
+   it.
 
-   --lime is inherited from the marketing tokens and stays non-semantic here
-   too: it marks the current nav tab and nothing else. State is --ok/--warn/--bad.
-   ─────────────────────────────────────────────────────────────────────── */
+   Ink is one step darker than the outline colour, deliberately — at 12px the
+   threshold is 4.5:1, and label-in-the-border-colour measures 2.96:1.
+   ═══════════════════════════════════════════════════════════════════════ */
 :root {
-  --shell: #2e7cf6;
-  --shell-2: #1f63d4;
-  --on-shell: #ffffff;
-  --on-shell-2: #cfe0fb;
-  --shell-hair: rgba(255, 255, 255, 0.18);
-  --console: #141b26;
-  --console-2: #1e2836;
+  --tag-blue-fill: #cfe3fb;      --tag-blue-ink: #1d4fbf;      --tag-blue-line: #3b82f6;
+  --tag-lime-fill: #e4f59b;      --tag-lime-ink: #4e680d;      --tag-lime-line: #8fbe1f;
+  --tag-aqua-fill: #b9edd4;      --tag-aqua-ink: #14714c;      --tag-aqua-line: #22a96f;
+  --tag-citric-fill: #fbdfb0;    --tag-citric-ink: #9a4c08;    --tag-citric-line: #e2761b;
+  --tag-klein-fill: #e8d4fa;     --tag-klein-ink: #7028b8;     --tag-klein-line: #a855f7;
+  --tag-fushia-fill: #fbd5e8;    --tag-fushia-ink: #a61e63;    --tag-fushia-line: #ec4899;
+  --tag-tangerine-fill: #fcdad3; --tag-tangerine-ink: #a93317; --tag-tangerine-line: #ef5b3c;
+  --tag-ink-fill: #e6e9ec;       --tag-ink-ink: #46525a;       --tag-ink-line: #97a3ab;
+
+  /* Notice banners, from the same hues. */
+  --notice-bad-fill: #fcdad3;    --notice-bad-line: #f3a695;
+  --notice-warn-fill: #fbdfb0;   --notice-warn-line: #e8b878;
+  --notice-good-fill: #b9edd4;   --notice-good-line: #7ed4ae;
+  --notice-info-fill: #cfe3fb;   --notice-info-line: #9cc0f5;
 }
 
-/* ───────────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════════════
    Dark values, defined once.
 
    Theme has THREE states, not two. An explicit choice stamps
-   data-theme="light" or "dark" on <html>; the default — "follow the system" —
+   data-theme="light" or "dark" on <html>; the default — follow the system —
    stamps nothing, and only prefers-color-scheme separates light from dark
-   there. So each palette needs to win in every one of those cases, which means
-   the mapping below appears twice: once guarded against an explicit light
-   choice beating a dark OS, and once for an explicit dark choice beating a
-   light OS.
+   there. So the mapping appears twice: once guarded against an explicit light
+   choice beating a dark OS, once for an explicit dark choice beating a light
+   OS.
 
    The mapping is duplicated; the VALUES are not. Every colour lives exactly
-   once as a --dk-* source variable, so changing one is a single edit and the
-   two blocks cannot drift apart in appearance.
-   ─────────────────────────────────────────────────────────────────────── */
-:root {
-  /* Shell dimmed rather than re-hued: it must stay recognisably itself, and a
-     full-strength blue band under a dark UI is a headache by mid-afternoon. */
-  --dk-shell: #1d4f9e;
-  --dk-shell-2: #163c78;
-  --dk-on-shell-2: #a6c4ee;
-  --dk-shell-hair: rgba(255, 255, 255, 0.12);
-  --dk-console: #0c111a;
-  --dk-console-2: #161e2a;
+   once as a --dk-* source, so the two blocks cannot drift apart.
 
-  --dk-paper: #0e141b;
-  --dk-surface: #151e28;
-  --dk-surface-2: #1d2833;
-  --dk-rule: #2e3d4c;
-  --dk-ink: #e4ebf2;
-  --dk-ink-2: #a2b2c4;
-  --dk-ink-3: #6f8298;
-  --dk-accent: #6fa0f0;
-  --dk-ok: #57c696;
-  --dk-warn: #e0a44a;
-  --dk-bad: #e58880;
+   And dark is SELECTED, not inverted — its own steps, checked against its own
+   ground. A programmatic flip of a light palette always produces mud.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root {
+  --dk-surface-page: #0f1220;
+  --dk-surface-card: #181d31;
+  --dk-surface-sunken: #222842;
+  --dk-rule: #2b3252;
+  --dk-rule-strong: #3b4468;
+  --dk-rule-soft: #212743;
+  --dk-ink: #f5f6f8;
+  --dk-ink-soft: #d2d6e0;
+  --dk-ink-muted: #9aa1b5;
+  --dk-ink-faint: #6d7590;
+  --dk-accent: #6b8af0;
+  --dk-accent-deep: #a5b9f7;
+  --dk-accent-wash: #1d2547;
+  --dk-accent-light: #3358e8;
+  --dk-on-accent: #0f1220;
+
+  --dk-viz-bar: #3a4a86;
+  --dk-viz-bar-peak: #8ba5f5;
+  --dk-viz-seq-1: #d8e1fc;
+  --dk-viz-seq-2: #a5b9f7;
+  --dk-viz-seq-3: #6b8af0;
+  --dk-viz-seq-4: #3358e8;
+  --dk-viz-seq-5: #2440b8;
+
+  --dk-ok: #9ae9c4;
+  --dk-warn: #f6cf95;
+  --dk-bad: #ffbcae;
+
+  /* Deep tint of each hue, light ink. */
+  --dk-tag-blue-fill: #16264a;      --dk-tag-blue-ink: #b9d0f8;
+  --dk-tag-lime-fill: #29330f;      --dk-tag-lime-ink: #dcf08a;
+  --dk-tag-aqua-fill: #0f3325;      --dk-tag-aqua-ink: #9ae9c4;
+  --dk-tag-citric-fill: #3a2408;    --dk-tag-citric-ink: #f6cf95;
+  --dk-tag-klein-fill: #2b1a45;     --dk-tag-klein-ink: #ddc2fa;
+  --dk-tag-fushia-fill: #3b1229;    --dk-tag-fushia-ink: #f7bcdb;
+  --dk-tag-tangerine-fill: #3d1a12; --dk-tag-tangerine-ink: #ffbcae;
+  --dk-tag-ink-fill: #1f272c;       --dk-tag-ink-ink: #cfd7dd;
 }
 
 @media (prefers-color-scheme: dark) {
   /* A dark OS, unless the person explicitly asked for light. */
   :root:not([data-theme="light"]) {
-    --shell: var(--dk-shell);
-    --shell-2: var(--dk-shell-2);
-    --on-shell-2: var(--dk-on-shell-2);
-    --shell-hair: var(--dk-shell-hair);
-    --console: var(--dk-console);
-    --console-2: var(--dk-console-2);
-    --paper: var(--dk-paper);
-    --surface: var(--dk-surface);
-    --surface-2: var(--dk-surface-2);
+    --surface-page: var(--dk-surface-page);
+    --surface-card: var(--dk-surface-card);
+    --surface-sunken: var(--dk-surface-sunken);
     --rule: var(--dk-rule);
+    --rule-strong: var(--dk-rule-strong);
+    --rule-soft: var(--dk-rule-soft);
     --ink: var(--dk-ink);
-    --ink-2: var(--dk-ink-2);
-    --ink-3: var(--dk-ink-3);
+    --ink-soft: var(--dk-ink-soft);
+    --ink-muted: var(--dk-ink-muted);
+    --ink-faint: var(--dk-ink-faint);
     --accent: var(--dk-accent);
+    --accent-deep: var(--dk-accent-deep);
+    --accent-wash: var(--dk-accent-wash);
+    --accent-light: var(--dk-accent-light);
+    --on-accent: var(--dk-on-accent);
+    --viz-bar: var(--dk-viz-bar);
+    --viz-bar-peak: var(--dk-viz-bar-peak);
+    --viz-seq-1: var(--dk-viz-seq-1);
+    --viz-seq-2: var(--dk-viz-seq-2);
+    --viz-seq-3: var(--dk-viz-seq-3);
+    --viz-seq-4: var(--dk-viz-seq-4);
+    --viz-seq-5: var(--dk-viz-seq-5);
     --ok: var(--dk-ok);
     --warn: var(--dk-warn);
     --bad: var(--dk-bad);
+
+    --tag-blue-fill: var(--dk-tag-blue-fill);           --tag-blue-ink: var(--dk-tag-blue-ink);
+    --tag-lime-fill: var(--dk-tag-lime-fill);           --tag-lime-ink: var(--dk-tag-lime-ink);
+    --tag-aqua-fill: var(--dk-tag-aqua-fill);           --tag-aqua-ink: var(--dk-tag-aqua-ink);
+    --tag-citric-fill: var(--dk-tag-citric-fill);       --tag-citric-ink: var(--dk-tag-citric-ink);
+    --tag-klein-fill: var(--dk-tag-klein-fill);         --tag-klein-ink: var(--dk-tag-klein-ink);
+    --tag-fushia-fill: var(--dk-tag-fushia-fill);       --tag-fushia-ink: var(--dk-tag-fushia-ink);
+    --tag-tangerine-fill: var(--dk-tag-tangerine-fill); --tag-tangerine-ink: var(--dk-tag-tangerine-ink);
+    --tag-ink-fill: var(--dk-tag-ink-fill);             --tag-ink-ink: var(--dk-tag-ink-ink);
+
+    --notice-bad-fill: var(--dk-tag-tangerine-fill);  --notice-bad-line: #6b2a1c;
+    --notice-warn-fill: var(--dk-tag-citric-fill);    --notice-warn-line: #6a4413;
+    --notice-good-fill: var(--dk-tag-aqua-fill);      --notice-good-line: #1b5c42;
+    --notice-info-fill: var(--dk-tag-blue-fill);      --notice-info-line: #28457c;
+ 
+    --deep: var(--dk-deep);
+    --deep-2: var(--dk-deep-2);
+    --sky: var(--dk-sky);
+    --spark: var(--dk-spark);
+    --spark-ink: var(--dk-spark-ink);
+    --on-deep: var(--dk-on-deep);
+    --on-deep-2: var(--dk-on-deep-2);
+    --on-deep-3: var(--dk-on-deep-3);
+    --on-band-line: var(--dk-on-band-line);
+    --on-band-veil: var(--dk-on-band-veil);
+    --on-band-veil-strong: var(--dk-on-band-veil-strong);
+    --field-glow-1: var(--dk-field-glow-1);
+    --field-glow-2: var(--dk-field-glow-2);
+    --field-line-1: var(--dk-field-line-1);
+    --field-line-2: var(--dk-field-line-2);
+    --card-lift: var(--dk-card-lift);
+    --m-paper: var(--dk-m-paper);
+    --m-surface: var(--dk-m-surface);
+    --m-surface-2: var(--dk-m-surface-2);
+    --m-rule: var(--dk-m-rule);
+    --m-ink: var(--dk-m-ink);
+    --m-ink-2: var(--dk-m-ink-2);
+    --m-ink-3: var(--dk-m-ink-3);
   }
 }
 
 /* An explicit dark choice, whatever the OS says. */
 :root[data-theme="dark"] {
-  --shell: var(--dk-shell);
-  --shell-2: var(--dk-shell-2);
-  --on-shell-2: var(--dk-on-shell-2);
-  --shell-hair: var(--dk-shell-hair);
-  --console: var(--dk-console);
-  --console-2: var(--dk-console-2);
-  --paper: var(--dk-paper);
-  --surface: var(--dk-surface);
-  --surface-2: var(--dk-surface-2);
+  --surface-page: var(--dk-surface-page);
+  --surface-card: var(--dk-surface-card);
+  --surface-sunken: var(--dk-surface-sunken);
   --rule: var(--dk-rule);
+  --rule-strong: var(--dk-rule-strong);
+  --rule-soft: var(--dk-rule-soft);
   --ink: var(--dk-ink);
-  --ink-2: var(--dk-ink-2);
-  --ink-3: var(--dk-ink-3);
+  --ink-soft: var(--dk-ink-soft);
+  --ink-muted: var(--dk-ink-muted);
+  --ink-faint: var(--dk-ink-faint);
   --accent: var(--dk-accent);
+  --accent-deep: var(--dk-accent-deep);
+  --accent-wash: var(--dk-accent-wash);
+  --accent-light: var(--dk-accent-light);
+  --on-accent: var(--dk-on-accent);
+  --viz-bar: var(--dk-viz-bar);
+  --viz-bar-peak: var(--dk-viz-bar-peak);
+  --viz-seq-1: var(--dk-viz-seq-1);
+  --viz-seq-2: var(--dk-viz-seq-2);
+  --viz-seq-3: var(--dk-viz-seq-3);
+  --viz-seq-4: var(--dk-viz-seq-4);
+  --viz-seq-5: var(--dk-viz-seq-5);
   --ok: var(--dk-ok);
   --warn: var(--dk-warn);
   --bad: var(--dk-bad);
+
+  --tag-blue-fill: var(--dk-tag-blue-fill);           --tag-blue-ink: var(--dk-tag-blue-ink);
+  --tag-lime-fill: var(--dk-tag-lime-fill);           --tag-lime-ink: var(--dk-tag-lime-ink);
+  --tag-aqua-fill: var(--dk-tag-aqua-fill);           --tag-aqua-ink: var(--dk-tag-aqua-ink);
+  --tag-citric-fill: var(--dk-tag-citric-fill);       --tag-citric-ink: var(--dk-tag-citric-ink);
+  --tag-klein-fill: var(--dk-tag-klein-fill);         --tag-klein-ink: var(--dk-tag-klein-ink);
+  --tag-fushia-fill: var(--dk-tag-fushia-fill);       --tag-fushia-ink: var(--dk-tag-fushia-ink);
+  --tag-tangerine-fill: var(--dk-tag-tangerine-fill); --tag-tangerine-ink: var(--dk-tag-tangerine-ink);
+  --tag-ink-fill: var(--dk-tag-ink-fill);             --tag-ink-ink: var(--dk-tag-ink-ink);
+
+  --notice-bad-fill: var(--dk-tag-tangerine-fill);  --notice-bad-line: #6b2a1c;
+  --notice-warn-fill: var(--dk-tag-citric-fill);    --notice-warn-line: #6a4413;
+  --notice-good-fill: var(--dk-tag-aqua-fill);      --notice-good-line: #1b5c42;
+  --notice-info-fill: var(--dk-tag-blue-fill);      --notice-info-line: #28457c;
+  --deep: var(--dk-deep);
+  --deep-2: var(--dk-deep-2);
+  --sky: var(--dk-sky);
+  --spark: var(--dk-spark);
+  --spark-ink: var(--dk-spark-ink);
+  --on-deep: var(--dk-on-deep);
+  --on-deep-2: var(--dk-on-deep-2);
+  --on-deep-3: var(--dk-on-deep-3);
+  --on-band-line: var(--dk-on-band-line);
+  --on-band-veil: var(--dk-on-band-veil);
+  --on-band-veil-strong: var(--dk-on-band-veil-strong);
+  --field-glow-1: var(--dk-field-glow-1);
+  --field-glow-2: var(--dk-field-glow-2);
+  --field-line-1: var(--dk-field-line-1);
+  --field-line-2: var(--dk-field-line-2);
+  --card-lift: var(--dk-card-lift);
+  --m-paper: var(--dk-m-paper);
+  --m-surface: var(--dk-m-surface);
+  --m-surface-2: var(--dk-m-surface-2);
+  --m-rule: var(--dk-m-rule);
+  --m-ink: var(--dk-m-ink);
+  --m-ink-2: var(--dk-m-ink-2);
+  --m-ink-3: var(--dk-m-ink-3);
 }
 
 /* Lets form controls, scrollbars and the like follow the chosen theme too. */
@@ -133,54 +305,125 @@
   color-scheme: light;
 }
 
-/* ───────────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════════════
    Marketing tokens — the public page at / and nothing else.
 
-   A deliberate extension of the palette above rather than a second identity:
-   --signal IS the admin's accent, so someone who signs up does not land
-   somewhere that looks like a different company. What this adds is depth (a
-   dark blue ground the admin never uses) and one high-energy accent.
+   The reference is calibrated for software people live in; a landing page takes
+   the palette and leaves the density. So these are the same blues, arranged for
+   a page built on alternating sections: a "band" (the hero, the approval
+   section) against a plainer body.
 
-   --lime is the page's single loud note, spent on primary action and on the
-   one number worth staring at. It is NOT semantic and must never carry state —
-   that is what --ok / --warn / --bad are for, and reusing it for decoration is
-   how a colour stops meaning anything.
+   That rhythm used to be carried by committing to dark — dark band, light body,
+   whatever the reader's machine said. It is carried by TINT now, so the page
+   can follow the same toggle as everything else: in light, a pale blue band
+   against off-white; in dark, a navy band against near-black. Either way the
+   sections still read as different rooms, which was the only thing the
+   commitment was buying.
 
-   Fixed across colour schemes on purpose. The hero is a dark surface in both,
-   so text on it cannot be a token that flips.
-   ─────────────────────────────────────────────────────────────────────── */
+   --spark is the page's single loud note, spent on the primary action and the
+   one number worth staring at. It is NOT semantic and must never carry state.
+   ═══════════════════════════════════════════════════════════════════════ */
 :root {
-  --deep: #071a2f;
-  --deep-2: #0d2c4d;
-  --signal: #2563c9;
-  --sky: #4a9df0;
-  --lime: #c8f751;
-  --lime-ink: #16240a;
-  --on-deep: #eaf2fb;
-  --on-deep-2: #9dbadb;
-  --on-deep-3: #5f83ab;
+  /* The band. */
+  --deep: #e7ecfb;
+  --deep-2: #f2f5fe;
+  --signal: #3358e8;
+  --sky: #5a7cec;
+  --spark: #3358e8;
+  --spark-ink: #ffffff;
 
-  /* The marketing page's own light surfaces, which do NOT follow the OS.
-     Its whole structure is dark hero → light body → dark section → light body,
-     and that rhythm is the design. Letting the light half flip in dark mode
-     collapses every section onto the same near-black and the page reads as one
-     undifferentiated field. The admin still adapts; a brand surface commits. */
-  --m-paper: #f4f7fa;
+  /* Ink ON the band. Light here means dark ink; the name says where it sits,
+     not what colour it is. */
+  --on-deep: #14161d;
+  --on-deep-2: #363b47;
+  --on-deep-3: #6b7280;
+
+  /* Things that sit on the band: a glass nav, a ghost button, a divider. They
+     were white at 5-25% alpha, which is only ever right on a dark ground. */
+  --on-band-line: rgba(20, 22, 29, 0.1);
+  --on-band-veil: rgba(255, 255, 255, 0.6);
+  --on-band-veil-strong: rgba(255, 255, 255, 0.92);
+
+  /* The field of time behind the hero. */
+  --field-glow-1: rgba(120, 150, 240, 0.34);
+  --field-glow-2: rgba(80, 120, 235, 0.2);
+  --field-line-1: rgba(51, 88, 232, 0.11);
+  --field-line-2: rgba(51, 88, 232, 0.07);
+
+  /* The one place a shadow earns its keep: cards that genuinely float above the
+     band rather than sitting in the page. */
+  --card-lift: 0 18px 44px -26px rgba(20, 30, 70, 0.35);
+
+  --m-paper: #f5f6f8;
   --m-surface: #ffffff;
-  --m-surface-2: #e8edf3;
-  --m-rule: #d3dce6;
-  --m-ink: #101b26;
-  --m-ink-2: #47586a;
-  --m-ink-3: #74879c;
+  --m-surface-2: #eef0f4;
+  --m-rule: #e6e8ee;
+  --m-ink: #14161d;
+  --m-ink-2: #363b47;
+  --m-ink-3: #6b7280;
+}
+
+/* The dark values, as sources. Mapped in the two blocks above, like every other
+   token in this file. */
+:root {
+  --dk-deep: #0f1220;
+  --dk-deep-2: #1b2340;
+  --dk-sky: #7f9bf2;
+  --dk-spark: #a5b9f7;
+  --dk-spark-ink: #111735;
+  --dk-on-deep: #f5f6f8;
+  --dk-on-deep-2: #b9c3e4;
+  --dk-on-deep-3: #7c87ad;
+  --dk-on-band-line: rgba(255, 255, 255, 0.14);
+  --dk-on-band-veil: rgba(255, 255, 255, 0.06);
+  --dk-on-band-veil-strong: rgba(255, 255, 255, 0.12);
+  --dk-field-glow-1: #24306a;
+  --dk-field-glow-2: #2a46c4;
+  --dk-field-line-1: rgba(165, 185, 247, 0.13);
+  --dk-field-line-2: rgba(165, 185, 247, 0.09);
+  --dk-card-lift: 0 24px 60px -20px rgba(3, 20, 40, 0.65);
+  --dk-m-paper: #0f1220;
+  --dk-m-surface: #181d31;
+  --dk-m-surface-2: #222842;
+  --dk-m-rule: #2b3252;
+  --dk-m-ink: #f5f6f8;
+  --dk-m-ink-2: #d2d6e0;
+  --dk-m-ink-3: #9aa1b5;
 }
 
 @theme inline {
+  /* Surfaces and ink */
+  --color-paper: var(--surface-page);
+  --color-surface: var(--surface-card);
+  --color-surface-2: var(--surface-sunken);
+  --color-surface-page: var(--surface-page);
+  --color-surface-card: var(--surface-card);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-rule-soft: var(--rule-soft);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-soft);
+  --color-ink-3: var(--ink-muted);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-accent: var(--accent);
+  --color-accent-deep: var(--accent-deep);
+  --color-accent-wash: var(--accent-wash);
+  --color-accent-light: var(--accent-light);
+  --color-on-accent: var(--on-accent);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+
+  /* Marketing */
   --color-deep: var(--deep);
   --color-deep-2: var(--deep-2);
   --color-signal: var(--signal);
   --color-sky: var(--sky);
-  --color-lime: var(--lime);
-  --color-lime-ink: var(--lime-ink);
+  --color-spark: var(--spark);
+  --color-spark-ink: var(--spark-ink);
   --color-on-deep: var(--on-deep);
   --color-on-deep-2: var(--on-deep-2);
   --color-on-deep-3: var(--on-deep-3);
@@ -191,33 +434,340 @@
   --color-m-ink: var(--m-ink);
   --color-m-ink-2: var(--m-ink-2);
   --color-m-ink-3: var(--m-ink-3);
-  --color-shell: var(--shell);
-  --color-shell-2: var(--shell-2);
-  --color-on-shell: var(--on-shell);
-  --color-on-shell-2: var(--on-shell-2);
-  --color-console: var(--console);
-  --color-console-2: var(--console-2);
-  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
-  --color-paper: var(--paper);
-  --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
-  --color-rule: var(--rule);
-  --color-ink: var(--ink);
-  --color-ink-2: var(--ink-2);
-  --color-ink-3: var(--ink-3);
-  --color-accent: var(--accent);
-  --color-ok: var(--ok);
-  --color-warn: var(--warn);
-  --color-bad: var(--bad);
+
+  /* Type. Two families, not three. */
+  --font-sans: var(--font-interface), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), Georgia, serif;
+
+  /* The scale is small on purpose: this is software people work in, where one
+     more row on screen is worth more than a generous headline. Body must never
+     go below 13px — when density is wanted, take it from the display sizes and
+     the padding, which is where the slack is. */
+  --text-xs: 11px;
+  --text-xs--line-height: 1.45;
+  --text-sm: 13px;
+  --text-sm--line-height: 1.5;
+  --text-base: 13px;
+  --text-base--line-height: 1.5;
+  --text-lg: 15px;
+  --text-lg--line-height: 1.4;
+  --text-xl: 17px;
+  --text-xl--line-height: 1.35;
+  --text-2xl: 19px;
+  --text-2xl--line-height: 1.3;
+  --text-3xl: 22px;
+  --text-3xl--line-height: 1.25;
+  --text-4xl: 27px;
+  --text-4xl--line-height: 1.2;
+
+  /* Radius — tight. Every existing rounded-* class lands on the reference's
+     scale without the class having to change. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 14px;
+  --radius-3xl: 14px;
 }
 
 html,
 body {
-  background: var(--paper);
+  background: var(--surface-page);
   color: var(--ink);
 }
 
-/* ── Marketing page only ────────────────────────────────────────────── */
+body {
+  font-family: var(--font-interface), ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Every figure, counter, timer and money value. Without it digits change width
+   as they change and the column jitters while you read down it. */
+.num,
+table td,
+table th {
+  font-variant-numeric: tabular-nums;
+}
+
+@layer components {
+  /* ── Buttons ───────────────────────────────────────────────────────
+     Variants are component classes, not composed utility strings. With
+     utility CSS the winner of two rules for the same property is decided by
+     the order the framework emits them, not the order they appear in the
+     string — which once shipped a primary button whose white text landed on a
+     light grey ground on hover, so the control vanished under the cursor. */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    /* Stops a button stretching to the full width of a column form, which is
+       what `display: inline-flex` does as a flex child under the default
+       `align-items: stretch`. A primary action the width of the page is a
+       different control from the one this describes. */
+    width: fit-content;
+    padding: 7px 14px;
+    border: 1px solid var(--rule);
+    border-radius: var(--pill);
+    background: var(--surface-card);
+    color: var(--ink);
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .btn:hover:not(:disabled) {
+    background: var(--surface-sunken);
+    border-color: var(--rule-strong);
+  }
+  .btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-deep);
+    border-color: var(--accent-deep);
+    color: var(--on-accent);
+  }
+
+  .btn-danger {
+    background: #c8412a;
+    border-color: #c8412a;
+    color: #fff;
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: #ad3522;
+    border-color: #ad3522;
+    color: #fff;
+  }
+
+  /* A quiet action that is still a button: no border, no fill. */
+  .btn-ghost {
+    border-color: transparent;
+    background: transparent;
+    color: var(--ink-muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--surface-sunken);
+    color: var(--ink);
+    border-color: transparent;
+  }
+
+  /* ── Cards ─────────────────────────────────────────────────────────
+     Flat, on purpose. With a near-white page and white cards the surfaces
+     already separate on tone and the rule draws the edge; a shadow is a third
+     statement of the same boundary. A hover lift is worse — a card that rises
+     with nothing beneath it to cast onto reads as a rendering glitch. */
+  .card {
+    background: var(--surface-card);
+    border: 1px solid var(--rule);
+    border-radius: var(--r);
+  }
+  .card-hover:hover {
+    border-color: var(--rule-strong);
+  }
+
+  /* ── Top-bar chips / tabs ──────────────────────────────────────────
+     White pill sitting slightly proud, quiet at rest, accent when active —
+     never filled. A filled tab competes with the primary action, and only one
+     thing on a screen should win. */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: var(--surface-card);
+    color: var(--ink-muted);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    box-shadow: 0 1px 2px rgba(20, 22, 29, 0.06), 0 2px 8px rgba(20, 22, 29, 0.05);
+    transition: color 0.15s, box-shadow 0.15s;
+  }
+  .chip:hover {
+    color: var(--ink);
+    box-shadow: 0 2px 4px rgba(20, 22, 29, 0.08), 0 6px 16px rgba(20, 22, 29, 0.08);
+  }
+  .chip[aria-pressed="true"],
+  .chip.is-active {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ── Sidebar ───────────────────────────────────────────────────────
+     The active item is the only coloured thing in the column. That is the job
+     colour should be doing here. */
+  .nav-heading {
+    padding: 0 8px;
+    font-size: 9.5px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    /* A dark grey, not the faint one the reference specifies. These headings
+       are what turn a list of ten links into four groups, and at 9.5px a pale
+       grey is furniture you read past — which defeats the grouping. Dark enough
+       to be read, and still quieter than the links below it, which are the
+       things you actually click. */
+    color: var(--ink-soft);
+  }
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 7px;
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    transition: background-color 0.12s, color 0.12s;
+  }
+  .nav-link:hover {
+    background: var(--surface-sunken);
+    color: var(--ink);
+  }
+  .nav-link.is-active {
+    background: var(--accent-wash);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ── Inputs ────────────────────────────────────────────────────────
+     width:100% by default. Several on one row need explicit widths, or each
+     claims the row and they stack — which looks like a layout bug and is
+     actually a specificity one. */
+  .input {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--rule);
+    border-radius: var(--r-sm);
+    background: var(--surface-card);
+    color: var(--ink);
+    font-size: 13px;
+    font-family: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .input::placeholder {
+    color: var(--ink-faint);
+  }
+  .input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+    outline: none;
+  }
+  .input:disabled {
+    background: var(--surface-sunken);
+    color: var(--ink-muted);
+  }
+
+  /* ── Status tags ───────────────────────────────────────────────────
+     Three channels: a fill, an ink, and a drawn glyph. A state has to survive
+     greyscale, colour blindness and a printed page — none of which a block of
+     colour does. */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 10px;
+    border-radius: 8px;
+    background-color: var(--tag-fill);
+    /* the gloss: white falling off the top edge */
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 60%);
+    color: var(--tag-ink);
+    box-shadow: 0 1px 2px rgba(20, 22, 29, 0.1);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 17px;
+    text-transform: lowercase;
+    white-space: nowrap;
+  }
+  /* On a dark ground the same white gloss reads as haze over the fill. */
+  :root[data-theme="dark"] .tag {
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 60%);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .tag {
+      background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 60%);
+    }
+  }
+  .tag-icon {
+    flex-shrink: 0;
+    opacity: 0.9;
+  }
+
+  .tag-blue { --tag-fill: var(--tag-blue-fill); --tag-ink: var(--tag-blue-ink); }
+  .tag-lime { --tag-fill: var(--tag-lime-fill); --tag-ink: var(--tag-lime-ink); }
+  .tag-aqua { --tag-fill: var(--tag-aqua-fill); --tag-ink: var(--tag-aqua-ink); }
+  .tag-citric { --tag-fill: var(--tag-citric-fill); --tag-ink: var(--tag-citric-ink); }
+  .tag-klein { --tag-fill: var(--tag-klein-fill); --tag-ink: var(--tag-klein-ink); }
+  .tag-fushia { --tag-fill: var(--tag-fushia-fill); --tag-ink: var(--tag-fushia-ink); }
+  .tag-tangerine { --tag-fill: var(--tag-tangerine-fill); --tag-ink: var(--tag-tangerine-ink); }
+  .tag-neutral { --tag-fill: var(--tag-ink-fill); --tag-ink: var(--tag-ink-ink); }
+
+  /* ── Coloured text and notices ─────────────────────────────────────
+     Same hues as the tags: a failure in a sentence and a failure in a badge
+     should not be two different reds. */
+  .txt-bad { color: var(--bad); }
+  .txt-good { color: var(--ok); }
+  .txt-warn { color: var(--warn); }
+
+  .notice {
+    border: 1px solid var(--n-line);
+    background: var(--n-fill);
+    color: var(--n-ink);
+    border-radius: var(--r-sm);
+    padding: 8px 12px;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .notice-bad { --n-fill: var(--notice-bad-fill); --n-line: var(--notice-bad-line); --n-ink: var(--bad); }
+  .notice-warn { --n-fill: var(--notice-warn-fill); --n-line: var(--notice-warn-line); --n-ink: var(--warn); }
+  .notice-good { --n-fill: var(--notice-good-fill); --n-line: var(--notice-good-line); --n-ink: var(--ok); }
+  .notice-info { --n-fill: var(--notice-info-fill); --n-line: var(--notice-info-line); --n-ink: var(--tag-blue-ink); }
+
+  /* ── Section label ("eyebrow") ─────────────────────────────────────── */
+  .eyebrow {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+
+  /* ── Tables ────────────────────────────────────────────────────────── */
+  .th {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    text-align: left;
+    padding: 7px 10px;
+    background: var(--surface-sunken);
+  }
+  .td {
+    padding: 7px 10px;
+    font-size: 13px;
+    border-top: 1px solid var(--rule-soft);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Marketing page only.
+   ═══════════════════════════════════════════════════════════════════════ */
 
 /**
  * The hero ground.
@@ -230,15 +780,15 @@ body {
  */
 .field {
   background:
-    radial-gradient(120% 80% at 50% 0%, #17518f 0%, transparent 60%),
-    radial-gradient(90% 60% at 85% 15%, #1c6bb8 0%, transparent 55%),
+    radial-gradient(120% 80% at 50% 0%, var(--field-glow-1) 0%, transparent 60%),
+    radial-gradient(90% 60% at 85% 15%, var(--field-glow-2) 0%, transparent 55%),
     linear-gradient(180deg, var(--deep-2) 0%, var(--deep) 70%);
 }
 
 .field-grid {
   background-image:
-    linear-gradient(to right, rgba(154, 200, 255, 0.13) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(154, 200, 255, 0.09) 1px, transparent 1px);
+    linear-gradient(to right, var(--field-line-1) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--field-line-2) 1px, transparent 1px);
   background-size: 88px 52px;
   /* Tilted away from the reader so the grid reads as a surface receding rather
      than as graph paper laid over the text. */
@@ -247,7 +797,7 @@ body {
   mask-image: linear-gradient(to top, #000 0%, transparent 78%);
 }
 
-/* Slots scattered on the field. A handful are lime — the free ones. */
+/* Slots scattered on the field. A handful take the accent — the free ones. */
 @keyframes slot-breathe {
   0%, 100% { opacity: 0.35; }
   50% { opacity: 0.9; }
@@ -275,6 +825,47 @@ body {
   animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* ── On the band ─────────────────────────────────────────────────────
+   A glass nav, a ghost button, a divider, a floating card. Each of these was a
+   white alpha — which is a colour that only works on a dark ground, and the
+   reason this page could not follow a theme toggle. They are tokens now, so
+   the same markup reads as frosted glass on navy and as raised paper on pale
+   blue. */
+.band-panel {
+  border: 1px solid var(--on-band-line);
+  background: var(--on-band-veil);
+  backdrop-filter: blur(10px);
+}
+.band-panel-interactive {
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.band-panel-interactive:hover {
+  background: var(--on-band-veil-strong);
+}
+.band-rule {
+  border-color: var(--on-band-line);
+}
+/* A card that genuinely floats above the band, rather than sitting in a page. */
+.band-card {
+  background: var(--m-surface);
+  border: 1px solid var(--m-rule);
+  box-shadow: var(--card-lift);
+  backdrop-filter: blur(10px);
+}
+.band-field {
+  border: 1px solid var(--on-band-line);
+  background: var(--on-band-veil);
+  color: var(--on-deep);
+}
+.band-field::placeholder {
+  color: var(--on-deep-3);
+}
+.band-field:focus {
+  outline: none;
+  border-color: var(--signal);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 22%, transparent);
+}
+
 /* Motion here is atmosphere, never information — so removing it costs nothing. */
 @media (prefers-reduced-motion: reduce) {
   .slot,
@@ -283,3 +874,40 @@ body {
     animation: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Where this departs from docs/ui-reference.md, and why.
+
+   Rule 5 of that document says contrast is measured rather than judged, and
+   that where a source reference fails, the value is changed and the reason
+   recorded. This is that record.
+
+   1. **--ink-faint is not used for text.** The reference assigns it to
+      timestamps, captions and placeholders. #9aa1ad on the page ground
+      measures 2.4:1 — below its own 4.5:1 floor for body text, and these are
+      read at 10-11px. Every caption, timestamp and piece of metadata here uses
+      --ink-muted (4.8:1) instead. --ink-faint is kept for input placeholders,
+      which are not content, and for the disabled state.
+
+      The sidebar's section headings go one step further still, to --ink-soft
+      (9.4:1): they are the only thing making the nav read as four groups rather
+      than ten links, and the accent is spoken for — it belongs to the item you
+      are on.
+
+   2. **Filled buttons carry --on-accent, not white.** The reference hardcodes
+      #fff on the accent, which is correct for the light accent (5.65:1) and
+      wrong for the dark one (#6b8af0, 2.5:1). The ink is a token, so it can be
+      near-black on the dark ground's lighter accent.
+
+   3. **A third family survives, for code only.** "Two families, not three" is
+      right for the interface, and everything a person reads as prose or as a
+      label obeys it. A webhook URL, an API key, a model id and the assembled
+      system prompt are not prose — they are strings someone has to compare
+      character by character, and a proportional face makes that harder. Those
+      keep the system mono stack, and nothing else does.
+
+   4. **Tags lowercase by default, with an escape.** The reference's tags are
+      lowercase, which is right for a state and wrong for a proper noun:
+      "DeepSeek" is not "deepseek". `Tag`'s `exact` prop turns it off for tags
+      that carry a name or an identifier.
+   ═══════════════════════════════════════════════════════════════════════ */

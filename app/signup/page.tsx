@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth/guard";
+import { readTheme } from "@/lib/theme";
+import { ThemeCorner } from "@/app/ThemeToggle";
 import { env } from "@/lib/env";
 import { PRESETS } from "@/lib/presets";
 import { SignUpForm } from "./SignUpForm";
@@ -12,14 +14,16 @@ export default async function SignUpPage() {
   // may as well not exist.
   if (env.CADENCE_SIGNUP_OPEN !== "true") notFound();
   if (await currentUser()) redirect("/admin");
+  const theme = await readTheme();
 
   return (
     <main className="mx-auto w-full max-w-lg px-6 py-16">
+      <ThemeCorner initial={theme} />
       <div className="mb-8 flex flex-col gap-1">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-3">
+        <span className="eyebrow">
           cadence
         </span>
-        <h1 className="font-mono text-2xl font-semibold tracking-tight">Set up your business</h1>
+        <h1 className="num text-[22px] font-semibold">Set up your business</h1>
         <p className="mt-2 text-sm text-ink-2">
           Takes a minute. You&apos;ll land on a checklist that walks you through the rest.
         </p>

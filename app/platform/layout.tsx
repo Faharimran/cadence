@@ -2,20 +2,35 @@ import Link from "next/link";
 import { currentOperator } from "@/lib/platform/guard";
 import { readTheme } from "@/lib/theme";
 import { ThemeToggle } from "@/app/ThemeToggle";
+import { SideNav, type NavSection } from "@/app/SideNav";
+import { Icon } from "@/app/icons";
 import { platformSignOut } from "./actions";
 
 /**
  * Operator console shell.
  *
- * The banner is not decoration. Everything below it is another company's
- * operational data, and the single most likely mistake here is forgetting which
- * console you are in — so the chrome says so, in a colour the tenant admin never
- * uses.
+ * Everything below this chrome is another company's operational data, and the
+ * single most likely mistake here is forgetting which console you are in. That
+ * used to be said with paint — the whole shell was near-black where the tenant
+ * admin was blue.
+ *
+ * It is said with words and one semantic hue now, because the interface has one
+ * palette and repainting the chrome per surface is exactly the "a lot of colour
+ * spent on something people navigate past" the reference argues against. What
+ * replaces it is louder about the actual risk: a strip across the top of every
+ * page that names the console and what it can see, in the warning hue, plus a
+ * sidebar that says "console" under the logotype. Neither can be mistaken for a
+ * tenant admin, and unlike a colour, both survive greyscale.
  *
  * The layout does NOT call requireOperator(): /platform/signin renders inside
  * it, and guarding here would redirect the sign-in page to itself. Each page
  * guards itself, which is where the check belongs anyway.
  */
+
+const NAV: NavSection[] = [
+  { items: [{ href: "/platform", label: "Every business", exact: true }] },
+];
+
 export default async function PlatformLayout({ children }: { children: React.ReactNode }) {
   const operator = await currentOperator();
   const theme = await readTheme();
@@ -25,51 +40,52 @@ export default async function PlatformLayout({ children }: { children: React.Rea
   if (!operator) return <>{children}</>;
 
   return (
-    <div className="flex min-h-screen flex-col bg-paper">
-      {/* Near-black rather than the admin's blue, and the same shape. Someone
-          who can open both surfaces should know which one they are looking at
-          from the colour alone, before reading a word of it. */}
-      <header className="bg-console text-on-shell">
-        <div
-          className="px-6 py-1.5 text-center font-mono text-[11px] uppercase tracking-[0.16em]"
-          style={{ background: "var(--warn)", color: "#1a1200" }}
-        >
-          Operator console · every business on the platform
+    <div className="flex min-h-screen flex-col bg-paper md:flex-row">
+      <aside className="flex shrink-0 flex-col border-b border-rule bg-surface md:sticky md:top-0 md:h-screen md:w-[184px] md:border-b-0 md:border-r">
+        <Link href="/platform" className="flex items-center gap-2 px-3 py-3.5">
+          <span
+            aria-hidden
+            className="grid size-6 shrink-0 place-items-center rounded-md bg-ink font-display text-[13px] font-semibold text-surface"
+          >
+            c
+          </span>
+          <span className="min-w-0 font-display text-[15px] font-semibold tracking-tight text-ink">
+            cadence <span className="text-ink-faint">/ console</span>
+          </span>
+        </Link>
+
+        <SideNav sections={NAV} />
+
+        <div className="mt-auto flex flex-col gap-2 border-t border-rule px-3 py-2.5">
+          <span className="truncate text-[11px] text-ink-faint" title={operator.email}>
+            {operator.email} · {operator.role}
+          </span>
+          <form action={platformSignOut}>
+            <button type="submit" className="btn btn-ghost">
+              Sign out
+            </button>
+          </form>
         </div>
+      </aside>
 
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-6 py-4">
-          <Link href="/platform" className="flex items-center gap-2.5">
-            <span
-              aria-hidden
-              className="grid size-7 place-items-center rounded-lg text-[12px] font-bold"
-              style={{ background: "var(--warn)", color: "#1a1200" }}
-            >
-              c
-            </span>
-            <span className="font-display text-[15px] font-semibold tracking-tight">
-              cadence <span className="text-on-shell-2">/ console</span>
-            </span>
-          </Link>
+      <main className="min-w-0 flex-1">
+        {/* Above the content on every page, not just the first one. Whoever is
+            reading this arrived by a deep link as often as not. */}
+        <div className="notice notice-warn flex items-center gap-2 rounded-none border-x-0 border-t-0 px-4 py-1.5">
+          <Icon name="alert" size={13} className="shrink-0" />
+          <span className="font-semibold">Operator console</span>
+          <span className="opacity-80">· every business on the platform</span>
 
-          <div className="ml-auto flex items-center gap-3">
-            <span className="hidden font-mono text-[11px] text-on-shell-2 sm:inline">
-              {operator.email} · {operator.role}
-            </span>
-            <ThemeToggle initial={theme} onShell />
-            <form action={platformSignOut}>
-              <button
-                type="submit"
-                className="rounded-full border border-white/25 bg-white/10 px-3.5 py-1.5 text-[12px] font-medium transition-colors hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-              >
-                Sign out
-              </button>
-            </form>
+          {/* Top right of the screen, like everywhere else. It sits IN the strip
+              rather than floating over it — this bar is the first thing on the
+              page, and a control laid on top of a warning is a control that
+              obscures one. */}
+          <div className="ml-auto">
+            <ThemeToggle initial={theme} />
           </div>
         </div>
-      </header>
 
-      <main className="mx-auto -mt-3 w-full max-w-6xl flex-1 rounded-t-2xl bg-paper px-6 py-8 sm:px-8">
-        {children}
+        <div className="mx-auto w-full max-w-[1150px] px-6 py-6">{children}</div>
       </main>
     </div>
   );

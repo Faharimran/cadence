@@ -64,7 +64,7 @@ export function ThreadList({
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search name or message"
           aria-label="Search conversations"
-          className="w-full rounded-full border border-rule bg-paper px-3.5 py-2 text-sm outline-none placeholder:text-ink-3/70 focus-visible:border-accent focus-visible:ring-4 focus-visible:ring-accent/15"
+          className="input"
         />
       </div>
 
@@ -92,7 +92,7 @@ export function ThreadList({
 
                   <LiveBadge lastInboundAt={t.lastInboundAt} />
 
-                  <span className="ml-auto shrink-0 font-mono text-[10px] text-ink-3">
+                  <span className="num ml-auto shrink-0 text-[10px] text-ink-3">
                     {relative(t.updatedAt, now)}
                   </span>
                 </div>
@@ -131,7 +131,7 @@ export function ThreadList({
         })}
       </ul>
 
-      <p className="border-t border-rule px-4 py-2 font-mono text-[10px] text-ink-3">
+      <p className="num border-t border-rule px-4 py-2 text-[10px] text-ink-3">
         {threads.length} thread{threads.length === 1 ? "" : "s"} · {timezone}
       </p>
     </aside>

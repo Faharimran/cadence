@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { Theme } from "@/lib/theme";
+import { Icon, type IconName } from "./icons";
 import { setTheme } from "./theme-actions";
 
 /**
@@ -11,12 +12,17 @@ import { setTheme } from "./theme-actions";
  * a genuine third answer and a binary toggle silently takes it away from
  * everyone who was relying on it.
  *
+ * The glyphs are drawn, not typed. The obvious characters for this control —
+ * ☀ and ☾ — are exactly the dingbats that switch to emoji presentation on their
+ * own, so the same markup renders as a line drawing on one machine and a yellow
+ * cartoon sun on the next.
+ *
  * The DOM is updated first and the cookie written after. Waiting for the round
  * trip would leave the button looking pressed and the page unchanged for a
  * couple of hundred milliseconds, which reads as broken; the cookie only has to
  * win on the *next* page load, and it does.
  */
-export function ThemeToggle({ initial, onShell }: { initial: Theme; onShell?: boolean }) {
+export function ThemeToggle({ initial }: { initial: Theme }) {
   const [theme, setLocal] = useState<Theme>(initial);
   const [, startTransition] = useTransition();
 
@@ -32,19 +38,17 @@ export function ThemeToggle({ initial, onShell }: { initial: Theme; onShell?: bo
     });
   }
 
-  const options: { value: Theme; label: string; glyph: string }[] = [
-    { value: "light", label: "Light", glyph: "☀" },
-    { value: "system", label: "Follow my computer", glyph: "◐" },
-    { value: "dark", label: "Dark", glyph: "☾" },
+  const options: { value: Theme; label: string; icon: IconName }[] = [
+    { value: "light", label: "Light", icon: "sun" },
+    { value: "system", label: "Follow my computer", icon: "monitor" },
+    { value: "dark", label: "Dark", icon: "moon" },
   ];
 
   return (
     <div
       role="radiogroup"
       aria-label="Colour theme"
-      className={`flex items-center gap-0.5 rounded-full p-0.5 ${
-        onShell ? "bg-white/10" : "border border-rule bg-surface-2"
-      }`}
+      className="flex items-center gap-0.5 rounded-lg border border-rule bg-surface-sunken p-0.5"
     >
       {options.map((o) => {
         const active = theme === o.value;
@@ -56,21 +60,31 @@ export function ThemeToggle({ initial, onShell }: { initial: Theme; onShell?: bo
             aria-checked={active}
             title={o.label}
             onClick={() => choose(o.value)}
-            className={`grid size-6 place-items-center rounded-full text-[11px] leading-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${
-              onShell
-                ? active
-                  ? "bg-white text-shell focus-visible:outline-white"
-                  : "text-on-shell-2 hover:text-on-shell focus-visible:outline-white"
-                : active
-                  ? "bg-surface text-ink shadow-sm focus-visible:outline-accent"
-                  : "text-ink-3 hover:text-ink focus-visible:outline-accent"
+            className={`grid size-[22px] place-items-center rounded-md transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
+              active ? "bg-surface text-accent" : "text-ink-faint hover:text-ink"
             }`}
           >
-            <span aria-hidden>{o.glyph}</span>
+            <Icon name={o.icon} size={12} />
             <span className="sr-only">{o.label}</span>
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * The same control, for a page with no chrome to sit in.
+ *
+ * Sign-in, sign-up and the operator sign-in are single centred cards. Someone
+ * who set the landing page light and then clicks "Sign in" should not land on a
+ * surface that has forgotten — and if their first encounter with cadence IS the
+ * sign-in page, the choice should be available there too.
+ */
+export function ThemeCorner({ initial }: { initial: Theme }) {
+  return (
+    <div className="fixed right-4 top-4 z-10">
+      <ThemeToggle initial={initial} />
     </div>
   );
 }

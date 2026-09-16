@@ -7,7 +7,7 @@ import { describeInstant } from "@/lib/engine/time";
 import { WhatsAppForm } from "../forms";
 import { CopyBox } from "./CopyBox";
 import { TestConnection } from "./TestConnection";
-import { Empty, PageHeader, Pill, Section } from "../../ui";
+import { BackLink, Empty, Notice, PageHeader, Pill, Section } from "../../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -114,9 +114,7 @@ export default async function WhatsAppGuidePage() {
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-2">
-        <Link href="/admin/settings" className="font-mono text-[11px] text-ink-3 hover:text-ink">
-          ← settings
-        </Link>
+        <BackLink href="/admin/settings">settings</BackLink>
         <PageHeader
           title="Connect WhatsApp"
           lede="This is the one setup step that happens outside cadence. It takes about fifteen minutes, you only do it once, and everything you need to copy is on this page."
@@ -130,7 +128,7 @@ export default async function WhatsAppGuidePage() {
             <Pill tone="warn">not connected</Pill>
           )}
           {channel?.displayNumber && (
-            <span className="font-mono text-[11px] text-ink-3">{channel.displayNumber}</span>
+            <span className="num text-[11px] text-ink-3">{channel.displayNumber}</span>
           )}
         </div>
       </div>
@@ -139,45 +137,27 @@ export default async function WhatsAppGuidePage() {
           because their customers stopped getting replies needs the reason
           first, not fifteen minutes of instructions they already followed. */}
       {recentFailure && (
-        <div
-          className="rounded-2xl border p-5"
-          style={{
-            borderColor: "color-mix(in srgb, var(--bad) 40%, transparent)",
-            background: "color-mix(in srgb, var(--bad) 7%, transparent)",
-          }}
-        >
-          <p className="text-sm font-semibold" style={{ color: "var(--bad)" }}>
-            A reply to a customer could not be sent
-          </p>
-          <p className="mt-2 max-w-[70ch] text-sm text-ink-2">{recentFailure.failureReason}</p>
-          <p className="mt-2 font-mono text-[11px] text-ink-3">
+        <Notice tone="bad" title="A reply to a customer could not be sent">
+          <p className="max-w-[70ch]">{recentFailure.failureReason}</p>
+          <p className="num mt-1.5 text-[11px] opacity-80">
             most recently {describeInstant(recentFailure.createdAt, user.tenantTimezone)}
           </p>
-        </div>
+        </Notice>
       )}
 
       {looksLocal && (
-        <div
-          className="rounded-2xl border p-5"
-          style={{
-            borderColor: "color-mix(in srgb, var(--bad) 40%, transparent)",
-            background: "color-mix(in srgb, var(--bad) 7%, transparent)",
-          }}
-        >
-          <p className="text-sm font-semibold" style={{ color: "var(--bad)" }}>
-            Stop — this address only works on this computer.
-          </p>
-          <p className="mt-2 max-w-[70ch] text-sm text-ink-2">
+        <Notice tone="bad" title="Stop — this address only works on this computer.">
+          <p className="max-w-[70ch]">
             Your webhook address is currently{" "}
             <code className="font-mono text-[12px]">{base}</code>. WhatsApp has to be able to reach
             cadence over the internet, and it cannot reach an address like that. Every step below
             will appear to work and no message will ever arrive.
           </p>
-          <p className="mt-2 max-w-[70ch] text-sm text-ink-2">
+          <p className="mt-1.5 max-w-[70ch]">
             Ask whoever set cadence up for you to give it a public web address first. Nothing else
             on this page will help until they have.
           </p>
-        </div>
+        </Notice>
       )}
 
       {/* ── What you need before starting ──────────────────────────── */}
@@ -568,13 +548,13 @@ function Step({
     <li className="flex gap-4 rounded-2xl border border-rule bg-surface p-5">
       <span
         aria-hidden
-        className="grid size-7 shrink-0 place-items-center rounded-full font-mono text-[12px] font-bold text-white"
+        className="num grid size-7 shrink-0 place-items-center rounded-full text-[12px] font-bold text-on-accent"
         style={{ background: "var(--accent)" }}
       >
         {n}
       </span>
       <div className="flex min-w-0 flex-col gap-2">
-        <h3 className="font-display text-[15px] font-semibold tracking-tight">{title}</h3>
+        <h3 className="text-[15px] font-semibold text-ink">{title}</h3>
         <div className="flex max-w-[72ch] flex-col gap-2 text-sm leading-relaxed text-ink-2">
           {children}
         </div>
@@ -609,6 +589,13 @@ function Table({ rows }: { rows: string[][] }) {
   );
 }
 
+/**
+ * The page's own callout, now a thin wrapper over the shared notice.
+ *
+ * It kept its own colours until the system grew a banner of its own — which is
+ * exactly how a product ends up with two greens that are nearly the same and no
+ * way to tell which one means "done".
+ */
 function Callout({
   tone,
   title,
@@ -619,15 +606,8 @@ function Callout({
   children?: React.ReactNode;
 }) {
   return (
-    <p
-      className="rounded-xl border px-3.5 py-2.5 text-[13px]"
-      style={{
-        borderColor: `color-mix(in srgb, var(--${tone}) 35%, transparent)`,
-        background: `color-mix(in srgb, var(--${tone}) 8%, transparent)`,
-      }}
-    >
-      <strong style={{ color: `var(--${tone})` }}>{title}</strong>{" "}
-      <span className="text-ink-2">{children}</span>
-    </p>
+    <Notice tone={tone === "ok" ? "good" : "warn"}>
+      <strong>{title}</strong> <span className="opacity-90">{children}</span>
+    </Notice>
   );
 }

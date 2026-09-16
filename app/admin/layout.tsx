@@ -2,8 +2,8 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
 import { readTheme } from "@/lib/theme";
 import { signOut } from "@/app/signin/actions";
-import { ThemeToggle } from "@/app/ThemeToggle";
-import { NavTabs } from "./NavTabs";
+import { ThemeCorner } from "@/app/ThemeToggle";
+import { SideNav, type NavSection } from "@/app/SideNav";
 
 /**
  * Admin shell.
@@ -13,24 +13,41 @@ import { NavTabs } from "./NavTabs";
  * still calls it independently, because a layout guard alone would not protect a
  * Server Action invoked by direct POST.
  *
- * The shape is a coloured band with the working area lifted into it. The band
- * carries identity and navigation; the sheet carries the work. Beyond looking
- * less like a spreadsheet, it does a real job: the colour is how you know at a
- * glance that this is a business admin and not the operator console, which is
- * near-black.
+ * The shape is a narrow light column beside a working area, and the column is
+ * sectioned. It replaced a coloured band with ten pills in a row, which had two
+ * problems a sidebar does not: the row was one destination away from wrapping
+ * onto a second line at any moment, and ten equally weighted labels tell you
+ * nothing about which of them you want.
  */
 
-const NAV = [
-  { href: "/admin", label: "Today" },
-  { href: "/admin/exceptions", label: "Leave & closures" },
-  { href: "/admin/schedules", label: "Opening hours" },
-  { href: "/admin/resources", label: "People & rooms" },
-  { href: "/admin/services", label: "Services" },
-  { href: "/admin/knowledge", label: "What you tell customers" },
-  { href: "/admin/bookings", label: "Bookings" },
-  { href: "/admin/conversations", label: "Conversations" },
-  { href: "/admin/integration", label: "Other software" },
-  { href: "/admin/settings", label: "Settings" },
+const NAV: NavSection[] = [
+  {
+    items: [
+      { href: "/admin", label: "Today", exact: true },
+      { href: "/admin/conversations", label: "Conversations" },
+      { href: "/admin/bookings", label: "Bookings" },
+    ],
+  },
+  {
+    heading: "Your diary",
+    items: [
+      { href: "/admin/schedules", label: "Opening hours" },
+      { href: "/admin/exceptions", label: "Leave & closures" },
+      { href: "/admin/resources", label: "People & rooms" },
+      { href: "/admin/services", label: "Services" },
+    ],
+  },
+  {
+    heading: "What it says",
+    items: [{ href: "/admin/knowledge", label: "What you tell customers" }],
+  },
+  {
+    heading: "Setup",
+    items: [
+      { href: "/admin/integration", label: "Other software" },
+      { href: "/admin/settings", label: "Settings" },
+    ],
+  },
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -38,45 +55,44 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const theme = await readTheme();
 
   return (
-    <div className="flex min-h-screen flex-col bg-paper">
-      <header className="bg-shell text-on-shell">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-6 py-4">
-          <Link href="/admin" className="flex items-center gap-2.5">
-            <span
-              aria-hidden
-              className="grid size-7 place-items-center rounded-lg text-[12px] font-bold"
-              style={{ background: "var(--lime)", color: "var(--lime-ink)" }}
-            >
-              c
-            </span>
-            <span className="font-display text-[15px] font-semibold tracking-tight">
-              {user.tenantName}
-            </span>
-          </Link>
+    <div className="flex min-h-screen flex-col bg-paper md:flex-row">
+      <aside className="flex shrink-0 flex-col border-b border-rule bg-surface md:sticky md:top-0 md:h-screen md:w-[184px] md:border-b-0 md:border-r">
+        <Link href="/admin" className="flex items-center gap-2 px-3 py-3.5">
+          <span
+            aria-hidden
+            className="grid size-6 shrink-0 place-items-center rounded-md bg-accent-wash font-display text-[13px] font-semibold text-accent"
+          >
+            c
+          </span>
+          <span className="truncate font-display text-[15px] font-semibold tracking-tight text-ink">
+            {user.tenantName}
+          </span>
+        </Link>
 
-          <div className="ml-auto flex items-center gap-3">
-            <span className="hidden font-mono text-[11px] text-on-shell-2 sm:inline">
-              {user.email} · {user.role}
-            </span>
-            <ThemeToggle initial={theme} onShell />
-            <form action={signOut}>
-              <button
-                type="submit"
-                className="rounded-full border border-white/25 bg-white/10 px-3.5 py-1.5 text-[12px] font-medium transition-colors hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-              >
-                Sign out
-              </button>
-            </form>
-          </div>
+        <SideNav sections={NAV} />
+
+        <div className="mt-auto flex flex-col gap-2 border-t border-rule px-3 py-2.5">
+          <span className="truncate text-[11px] text-ink-faint" title={user.email}>
+            {user.email}
+          </span>
+          <form action={signOut}>
+            <button type="submit" className="btn btn-ghost">
+              Sign out
+            </button>
+          </form>
         </div>
+      </aside>
 
-        <NavTabs items={NAV} />
-      </header>
+      {/* Top right of the screen, the same place it sits on the sign-in pages and
+          on the landing page. It is a setting people reach for once and then
+          look for in the same corner every time — which is an argument for one
+          position across every surface, not for the tidiest spot on each. */}
+      <ThemeCorner initial={theme} />
 
-      {/* Lifted into the band by its own height, so the sheet reads as sitting
-          on top of it rather than butting against it. */}
-      <main className="mx-auto -mt-3 w-full max-w-6xl flex-1 rounded-t-2xl bg-paper px-6 py-8 sm:px-8">
-        {children}
+      {/* 24px of page padding and a ~1150px measure: past that, a table's first
+          and last columns are far enough apart to lose the row between them. */}
+      <main className="min-w-0 flex-1">
+        <div className="mx-auto w-full max-w-[1150px] px-6 py-6">{children}</div>
       </main>
     </div>
   );

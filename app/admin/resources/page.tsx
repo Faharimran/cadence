@@ -50,11 +50,11 @@ export default async function ResourcesPage() {
           <ul className="flex flex-col gap-2">
             {resources.map((r) => (
               <Row key={r.id}>
-                <span className="font-mono text-sm font-semibold">{r.name}</span>
+                <span className="num text-sm font-semibold">{r.name}</span>
                 <Pill>{KIND_LABEL[r.kind] ?? r.kind}</Pill>
 
                 {r.tags.length > 0 && (
-                  <span className="font-mono text-[11px] text-ink-3">{r.tags.join(" · ")}</span>
+                  <span className="num text-[11px] text-ink-3">{r.tags.join(" · ")}</span>
                 )}
 
                 <span className="text-xs text-ink-2">

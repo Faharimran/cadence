@@ -29,12 +29,12 @@ export function TestConnection() {
       </div>
 
       {state?.ok && (
-        <p role="status" className="text-sm" style={{ color: "var(--ok)" }}>
+        <p role="status" className="txt-good text-sm">
           {state.ok}
         </p>
       )}
       {state?.error && (
-        <p role="alert" className="max-w-[70ch] text-sm" style={{ color: "var(--bad)" }}>
+        <p role="alert" className="txt-bad max-w-[70ch] text-sm">
           {state.error}
         </p>
       )}

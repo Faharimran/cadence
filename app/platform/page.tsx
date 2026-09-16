@@ -36,12 +36,12 @@ export default async function PlatformOverview() {
                 {item.tenantId ? (
                   <Link
                     href={`/platform/tenants/${item.tenantId}`}
-                    className="font-mono text-sm font-semibold text-accent underline underline-offset-2"
+                    className="text-sm font-semibold text-accent underline underline-offset-2"
                   >
                     {item.tenantName}
                   </Link>
                 ) : (
-                  <span className="font-mono text-sm font-semibold">{item.tenantName ?? "—"}</span>
+                  <span className="num text-sm font-semibold">{item.tenantName ?? "—"}</span>
                 )}
                 <span className="text-sm text-ink-2">{item.what}</span>
               </Row>
@@ -81,7 +81,7 @@ export default async function PlatformOverview() {
                     (h) => (
                       <th
                         key={h}
-                        className="whitespace-nowrap px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-3"
+                        className="th whitespace-nowrap"
                       >
                         {h}
                       </th>
@@ -119,17 +119,17 @@ export default async function PlatformOverview() {
                         <span className="text-ink-3">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono tabular-nums">
+                    <td className="num px-3 py-2.5 text-right">
                       {t.approvedArticles || <span className="text-ink-3">0</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono tabular-nums">
+                    <td className="num px-3 py-2.5 text-right">
                       {t.conversations7d}
                       {t.escalations7d > 0 && (
                         <span className="text-ink-3"> ({t.escalations7d} handed over)</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono tabular-nums">{t.bookings7d}</td>
-                    <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[11px] text-ink-3">
+                    <td className="num px-3 py-2.5 text-right">{t.bookings7d}</td>
+                    <td className="num whitespace-nowrap px-3 py-2.5 text-[11px] text-ink-3">
                       {t.createdAt.toISOString().slice(0, 10)}
                     </td>
                   </tr>
@@ -154,8 +154,8 @@ function Metric({
 }) {
   return (
     <div className="rounded-lg border border-rule bg-surface p-4">
-      <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-3">{label}</p>
-      <p className="mt-2 font-mono text-2xl font-semibold tabular-nums">{value}</p>
+      <p className="eyebrow">{label}</p>
+      <p className="num mt-2 text-[22px] font-semibold">{value}</p>
       {note && <p className="mt-1 text-[11px] text-ink-3">{note}</p>}
     </div>
   );

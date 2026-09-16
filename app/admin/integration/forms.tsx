@@ -16,7 +16,7 @@ function ShownOnce({ value }: { value: string }) {
       className="flex flex-col gap-2 rounded-md border p-3"
       style={{ borderColor: "color-mix(in srgb, var(--warn) 45%, transparent)" }}
     >
-      <span className="font-mono text-[11px] uppercase tracking-[0.12em]" style={{ color: "var(--warn)" }}>
+      <span className="txt-warn eyebrow">
         Copy this now — it is not shown again
       </span>
       <code className="overflow-x-auto whitespace-nowrap rounded bg-surface-2 px-3 py-2 font-mono text-xs">
@@ -30,12 +30,12 @@ function Feedback({ state }: { state: IntegrationFormState }) {
   return (
     <>
       {state?.error && (
-        <p role="alert" className="text-sm" style={{ color: "var(--bad)" }}>
+        <p role="alert" className="txt-bad text-sm">
           {state.error}
         </p>
       )}
       {state?.ok && !state.secret && (
-        <p role="status" className="text-sm" style={{ color: "var(--ok)" }}>
+        <p role="status" className="txt-good text-sm">
           {state.ok}
         </p>
       )}

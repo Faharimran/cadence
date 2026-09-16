@@ -72,7 +72,7 @@ export default async function BookingsPage({
               const live = ["held", "scheduled", "confirmed"].includes(b.status);
               return (
                 <Row key={b.id}>
-                  <span className="font-mono text-sm font-semibold tabular-nums">
+                  <span className="num text-sm font-semibold">
                     {describeInstant(b.startsAt, b.location.timezone)}
                   </span>
                   <span className="text-sm">
@@ -81,7 +81,7 @@ export default async function BookingsPage({
                   <span className="text-sm text-ink-2">{b.service.name}</span>
                   <Pill tone={TONE[b.status]}>{b.status.replace("_", " ")}</Pill>
 
-                  <span className="font-mono text-[11px] text-ink-3">
+                  <span className="num text-[11px] text-ink-3">
                     {b.location.name} · {b.resources.map((r) => r.resource.name).join(" + ")}
                     {b.source === "agent" && " · booked by the assistant"}
                   </span>

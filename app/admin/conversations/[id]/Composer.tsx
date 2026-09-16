@@ -60,7 +60,7 @@ export function Composer({
         />
         <button
           type="submit"
-          className="shrink-0 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="btn btn-primary shrink-0"
         >
           Send
         </button>

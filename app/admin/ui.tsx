@@ -1,25 +1,27 @@
 import Link from "next/link";
+import { Icon, type IconName } from "@/app/icons";
 
 /**
  * Shared admin primitives.
  *
  * Not a component library — just the handful of shapes every screen repeats, in
- * one place so a spacing or focus-ring change lands everywhere at once. Anything
- * used on a single screen stays on that screen. Sixteen files import from here,
- * which is why restyling happens in this file rather than across all of them.
+ * one place so a spacing or focus change lands everywhere at once. Sixteen
+ * files import from here, which is why restyling happens in this file rather
+ * than across all of them.
  *
- * The visual language is soft and rounded: generous radii, hairline borders, a
- * lift on anything interactive. What it deliberately does NOT inherit from that
- * language is density. A booking list or a schedule grid is scanned, not
- * browsed, so `Row` stays compact and every number stays tabular — a card big
- * enough to be charming is a card you can only fit six of on a screen.
+ * The language is docs/ui-reference.md: a near-white page with white cards on
+ * it, hairline rules, tight radii, one accent spent rarely, and a status system
+ * that carries a fill, an ink AND a drawn glyph so a state survives greyscale
+ * and colour blindness. Density is deliberate — this is software people read
+ * all day, where one more row on screen is worth more than a generous headline.
+ *
+ * Nothing here contains a hex value. Every colour is a token from globals.css.
  */
 
-export const inputClass =
-  "rounded-xl border border-rule bg-surface px-3.5 py-2.5 text-sm outline-none transition-colors " +
-  "placeholder:text-ink-3/70 focus-visible:border-accent focus-visible:ring-4 focus-visible:ring-accent/15";
+/** The `.input` component class. Named for the twenty files already using it. */
+export const inputClass = "input";
 
-export const labelClass = "font-mono text-[11px] uppercase tracking-[0.12em] text-ink-3";
+export const labelClass = "eyebrow";
 
 export function Field({
   label,
@@ -34,22 +36,35 @@ export function Field({
     <label className="flex flex-col gap-1.5">
       <span className={labelClass}>{label}</span>
       {children}
-      {hint && <span className="text-[11px] leading-relaxed text-ink-3">{hint}</span>}
+      {hint && <span className="text-[11px] leading-relaxed text-ink-faint">{hint}</span>}
     </label>
   );
 }
 
+/**
+ * The page title.
+ *
+ * Interface face, not the display one. Playfair is for the logotype; a 19px
+ * page heading in a serif reads as an article, and this is a console.
+ */
 export function PageHeader({ title, lede }: { title: string; lede?: string }) {
   return (
-    <header className="flex flex-col gap-2">
-      <h1 className="font-display text-[1.75rem] font-semibold leading-tight tracking-[-0.02em]">
+    <header className="flex flex-col gap-1.5">
+      <h1 className="text-[19px] font-semibold leading-tight tracking-[-0.01em] text-ink">
         {title}
       </h1>
-      {lede && <p className="max-w-[62ch] text-sm leading-relaxed text-ink-2">{lede}</p>}
+      {lede && <p className="max-w-[72ch] text-sm leading-relaxed text-ink-2">{lede}</p>}
     </header>
   );
 }
 
+/**
+ * A card, or a labelled run of content.
+ *
+ * Flat in both cases. With a near-white page and white cards the surfaces
+ * already separate on tone and the rule draws the edge — a shadow on top is a
+ * third statement of the same boundary.
+ */
 export function Section({
   title,
   children,
@@ -59,41 +74,47 @@ export function Section({
   children: React.ReactNode;
   boxed?: boolean;
 }) {
+  if (boxed) {
+    return (
+      <section className="card card-hover p-4">
+        <h2 className="mb-3 text-[15px] font-semibold leading-snug text-ink">{title}</h2>
+        {children}
+      </section>
+    );
+  }
   return (
-    <section
-      className={
-        boxed
-          ? "rounded-2xl border border-rule bg-surface p-6 shadow-[0_1px_2px_rgba(16,32,48,0.04),0_8px_24px_-16px_rgba(16,32,48,0.18)]"
-          : "flex flex-col gap-3"
-      }
-    >
-      <h2
-        className={
-          boxed
-            ? "mb-4 font-mono text-xs font-semibold uppercase tracking-[0.13em] text-accent"
-            : "border-b border-rule pb-2 font-mono text-xs font-semibold uppercase tracking-[0.13em] text-accent"
-        }
-      >
-        {title}
-      </h2>
+    <section className="flex flex-col gap-3">
+      <h2 className="border-b border-rule pb-1.5 text-[15px] font-semibold text-ink">{title}</h2>
       {children}
     </section>
   );
 }
 
+/**
+ * Buttons.
+ *
+ * Variants are component classes (`.btn-primary`), never a base utility string
+ * with an override for the same property — with utility CSS the winner is
+ * decided by the order the framework emits its rules, not the order they appear
+ * in the string. One filled primary action per screen; everything else is the
+ * quiet white pill.
+ */
 export function Button({
   children,
   variant = "primary",
   ...rest
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "quiet" }) {
-  const base =
-    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50 disabled:pointer-events-none";
-  const styles =
-    variant === "primary"
-      ? "self-start rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-[0_6px_16px_-8px_var(--accent)] transition-transform hover:-translate-y-px active:translate-y-0"
-      : "font-mono text-[11px] text-ink-3 underline underline-offset-2 transition-colors hover:text-ink";
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "primary" | "quiet" | "danger" | "plain";
+}) {
+  const variantClass = {
+    primary: "btn btn-primary",
+    danger: "btn btn-danger",
+    quiet: "btn btn-ghost",
+    plain: "btn",
+  }[variant];
+
   return (
-    <button {...rest} className={`${base} ${styles}`}>
+    <button {...rest} className={variantClass}>
       {children}
     </button>
   );
@@ -101,7 +122,7 @@ export function Button({
 
 export function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <p className="rounded-xl border border-dashed border-rule px-4 py-5 text-sm text-ink-2">
+    <p className="rounded-lg border border-dashed border-rule px-3.5 py-4 text-sm text-ink-2">
       {children}
     </p>
   );
@@ -109,38 +130,178 @@ export function Empty({ children }: { children: React.ReactNode }) {
 
 export function Row({ children }: { children: React.ReactNode }) {
   return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-rule bg-surface px-4 py-3 transition-colors hover:border-accent/40">
+    <li className="card card-hover flex flex-wrap items-center gap-x-3.5 gap-y-1.5 px-3.5 py-2.5">
       {children}
     </li>
   );
 }
 
-export function Pill({ children, tone }: { children: React.ReactNode; tone?: "ok" | "bad" | "warn" }) {
-  const colour = tone ? `var(--${tone})` : "var(--ink-3)";
+/* ═══════════════════════════════════════════════════════════════════════
+   Status
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * The eight hues, and what each one is for.
+ *
+ * Badges answer different questions — is it held, has this person opted out,
+ * does it need a person, did it fail — and one hue cannot give four answers.
+ * These were measured rather than chosen: the worst adjacent pair clears ΔE 15
+ * for normal vision and for the worst colour-blind pairing. Narrow this palette
+ * and it has to be measured again.
+ */
+export type TagHue =
+  | "blue"
+  | "lime"
+  | "aqua"
+  | "citric"
+  | "klein"
+  | "fushia"
+  | "tangerine"
+  | "neutral";
+
+export function Tag({
+  children,
+  hue = "neutral",
+  icon,
+  exact,
+}: {
+  children: React.ReactNode;
+  hue?: TagHue;
+  /** The third channel. A state must survive greyscale and a printed page. */
+  icon?: IconName;
+  /**
+   * Keeps the label's own capitalisation. Tags are lowercase by default, which
+   * is right for a state ("held", "needs a person") and wrong for a tag that
+   * carries a proper noun or an identifier — "DeepSeek" is not "deepseek".
+   */
+  exact?: boolean;
+}) {
   return (
-    <span
-      className="rounded-full px-2.5 py-0.5 font-mono text-[11px] font-semibold"
-      style={{
-        color: colour,
-        background: `color-mix(in srgb, ${colour} 12%, transparent)`,
-        border: `1px solid color-mix(in srgb, ${colour} 28%, transparent)`,
-      }}
-    >
+    <span className={`tag tag-${hue}`} style={exact ? { textTransform: "none" } : undefined}>
+      {icon && <Icon name={icon} size={11} className="tag-icon" />}
       {children}
     </span>
+  );
+}
+
+/**
+ * The older three-tone badge, kept because thirteen screens call it.
+ *
+ * It maps onto the tag palette rather than re-implementing one: good is the
+ * aqua with a tick, a warning is the citric with a triangle, a failure is the
+ * tangerine with a cross, and no tone is the neutral grey. New code should
+ * reach for `Tag` and pick the hue that answers the actual question.
+ */
+export function Pill({
+  children,
+  tone,
+  exact,
+}: {
+  children: React.ReactNode;
+  tone?: "ok" | "bad" | "warn";
+  exact?: boolean;
+}) {
+  const map = {
+    ok: { hue: "aqua", icon: "check" },
+    warn: { hue: "citric", icon: "alert" },
+    bad: { hue: "tangerine", icon: "cross" },
+  } as const;
+  // No tone means no state — a category, a count, a name. Those get the neutral
+  // fill and NO glyph: the third channel exists to tell two states apart, and a
+  // glyph that says nothing is just a smaller word.
+  const chosen = tone ? map[tone] : null;
+
+  return (
+    <Tag hue={chosen?.hue ?? "neutral"} icon={chosen?.icon} exact={exact}>
+      {children}
+    </Tag>
+  );
+}
+
+/**
+ * An inline banner. Same hues as the tags, on purpose: a failure in a sentence
+ * and a failure in a badge must not be two different reds.
+ */
+export function Notice({
+  tone = "info",
+  title,
+  children,
+}: {
+  tone?: "bad" | "warn" | "good" | "info";
+  title?: string;
+  children: React.ReactNode;
+}) {
+  const icons: Record<typeof tone, IconName> = {
+    bad: "cross",
+    warn: "alert",
+    good: "check",
+    info: "info",
+  };
+
+  return (
+    <div className={`notice notice-${tone} flex gap-2.5`}>
+      <Icon name={icons[tone]} size={14} className="mt-0.5 shrink-0" />
+      <div className="flex flex-col gap-1">
+        {title && <p className="font-semibold">{title}</p>}
+        <div className="[&_p]:leading-relaxed">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A figure worth looking at.
+ *
+ * Tabular numerals are not a detail here: without them digits change width as
+ * they change, and a column of counts jitters as you read down it.
+ */
+export function Stat({
+  label,
+  value,
+  hint,
+  hero,
+}: {
+  label: string;
+  value: React.ReactNode;
+  hint?: string;
+  hero?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className={labelClass}>{label}</span>
+      <span
+        className={`num font-semibold leading-none text-ink ${hero ? "text-[27px]" : "text-[22px]"}`}
+      >
+        {value}
+      </span>
+      {hint && <span className="text-[11px] text-ink-faint">{hint}</span>}
+    </div>
   );
 }
 
 /** Shown when a screen needs something set up first. */
 export function Prerequisite({ what, href, cta }: { what: string; href: string; cta: string }) {
   return (
-    <p className="rounded-xl border border-dashed border-rule px-4 py-5 text-sm text-ink-2">
+    <p className="rounded-lg border border-dashed border-rule px-3.5 py-4 text-sm text-ink-2">
       {what}{" "}
       <Link href={href} className="font-medium text-accent underline underline-offset-2">
         {cta}
       </Link>
       .
     </p>
+  );
+}
+
+/** A back link, with a drawn arrow rather than a character that varies by OS. */
+export function BackLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1.5 text-[11px] text-ink-muted transition-colors hover:text-ink"
+    >
+      <Icon name="arrow-left" size={12} />
+      {children}
+    </Link>
   );
 }
 

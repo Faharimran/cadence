@@ -75,10 +75,10 @@ export default async function KnowledgePage() {
           <ul className="flex flex-col gap-2">
             {sources.map((s) => (
               <Row key={s.id}>
-                <span className="font-mono text-sm font-semibold">{s.filename}</span>
+                <span className="num text-sm font-semibold">{s.filename}</span>
                 {/* A website has no file size, and "0 KB" beside a domain name
                     reads as something having gone wrong. */}
-                <span className="font-mono text-[11px] tabular-nums text-ink-3">
+                <span className="num text-[11px] text-ink-3">
                   {s.kind === "web"
                     ? `website${s.pageCount ? ` · ${s.pageCount} pages read` : ""}`
                     : `${(s.byteSize / 1024).toFixed(0)} KB${s.pageCount ? ` · ${s.pageCount} pages` : ""}`}
@@ -141,8 +141,8 @@ export default async function KnowledgePage() {
               Counts are shown because the number going live is the thing worth
               knowing before pressing it. */}
           {draftTags.length > 0 && (
-            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface-2 p-3">
-              <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-3">
+            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-rule bg-surface-2 p-3">
+              <span className="eyebrow">
                 approve a subject
               </span>
               {draftTags.map(({ tag, count }) => (
@@ -150,7 +150,7 @@ export default async function KnowledgePage() {
                   <input type="hidden" name="tag" value={tag} />
                   <button
                     type="submit"
-                    className="rounded-full border border-line px-3 py-1 font-mono text-[11px] transition-colors hover:border-accent hover:text-accent"
+                    className="chip"
                   >
                     {tag} <span className="text-ink-3">({count})</span>
                   </button>
@@ -167,10 +167,10 @@ export default async function KnowledgePage() {
               <Row key={d.id}>
                 <div className="flex w-full flex-col gap-2">
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <span className="font-display text-[15px] font-semibold tracking-tight">{d.title}</span>
+                    <span className="text-[15px] font-semibold text-ink">{d.title}</span>
                     <Pill tone="warn">draft</Pill>
                     {d.source && (
-                      <span className="font-mono text-[11px] text-ink-3">
+                      <span className="num text-[11px] text-ink-3">
                         {d.source.filename}
                         {d.sourcePage ? ` · p${d.sourcePage}` : ""}
                       </span>
@@ -212,7 +212,7 @@ export default async function KnowledgePage() {
                 <Row key={d.id}>
                   <div className="flex w-full flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                      <span className="font-display text-[15px] font-semibold tracking-tight">{d.title}</span>
+                      <span className="text-[15px] font-semibold text-ink">{d.title}</span>
                       <Pill tone="ok">live · v{d.version}</Pill>
                       {d.tags.map((t) => (
                         <Pill key={t}>{t}</Pill>
@@ -244,7 +244,7 @@ export default async function KnowledgePage() {
           <ul className="flex flex-col gap-2">
             {archived.map((d) => (
               <Row key={d.id}>
-                <span className="font-mono text-sm text-ink-2">{d.title}</span>
+                <span className="num text-sm text-ink-2">{d.title}</span>
                 <Pill>retired</Pill>
                 <form action={restoreDoc} className="ml-auto">
                   <input type="hidden" name="id" value={d.id} />
