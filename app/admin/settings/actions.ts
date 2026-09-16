@@ -1,11 +1,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { asTenant, requireRole } from "@/lib/auth/guard";
 import { assertValidTimezone } from "@/lib/engine/time";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { isKnownModel, isKnownEffort } from "@/lib/conversation/models";
+import {
+  findVendor,
+  isProviderFailure,
+  recordProviderFailure,
+  recordProviderOk,
+  unsafeEndpointReason,
+} from "@/lib/conversation/providers";
+import { pingProvider } from "@/lib/conversation/drivers";
 import { explainSendFailure, describeTokenLifetime } from "@/lib/channels/whatsapp";
 
 export type SettingsFormState = { error?: string; ok?: string } | null;
@@ -398,5 +407,231 @@ export async function testWhatsAppConnection(): Promise<SettingsFormState> {
     }
 
     return { error: explainSendFailure(body.error?.code, res.status) };
+  });
+}
+
+/**
+ * Which API key answers customers: cadence's, or the business's own.
+ *
+ * Owner-only, like the WhatsApp credentials and for the same two reasons — it is
+ * a secret, and it spends money. A manager can change how the assistant sounds;
+ * whose account pays for it is the owner's decision.
+ *
+ * Two shapes in one action, because they are one choice on one form. Choosing
+ * cadence's key does NOT delete what was saved: it sets `active` false, so
+ * switching back next week does not mean finding the key again. A key that is
+ * genuinely finished with is removed by the button that says so.
+ */
+const SaveProvider = z.object({
+  source: z.enum(["cadence", "own"]),
+  // Everything below defaults to empty rather than being required, because the
+  // form legitimately submits without them: choosing cadence's key renders no
+  // fields at all, and a preset vendor supplies its own address.
+  vendor: z.string().max(40).default(""),
+  baseUrl: z.string().max(400).default(""),
+  apiKey: z
+    .string()
+    .max(500, "That key is unusually long — check you pasted only the key.")
+    // A pasted key with a space in it is a truncated paste or two values at
+    // once, and the error it causes at the provider is a flat 401 that names
+    // nothing.
+    .refine((v) => !/\s/.test(v.trim()), "That key contains a space. Paste just the key.")
+    .default(""),
+  model: z
+    .string()
+    .max(120)
+    .refine((v) => !/\s/.test(v.trim()), "A model id has no spaces in it.")
+    .default(""),
+});
+
+export async function saveModelProvider(
+  _previous: SettingsFormState,
+  formData: FormData,
+): Promise<SettingsFormState> {
+  const user = await requireRole("owner");
+
+  const parsed = SaveProvider.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+  const input = parsed.data;
+
+  return asTenant(user, async (db) => {
+    const existing = await db.modelProvider.findFirst({ where: { tenantId: user.tenantId } });
+
+    // ── Back to cadence's key ────────────────────────────────────────
+    if (input.source === "cadence") {
+      if (existing?.active) {
+        await db.modelProvider.update({ where: { id: existing.id }, data: { active: false } });
+        await audit(db, user, "tenant.model_provider_disabled", { vendor: existing.vendor });
+      }
+      revalidatePath("/admin/settings/model");
+      revalidatePath("/admin/settings/agent");
+      return { ok: "Answers now run on cadence's key. Your own is kept, not deleted." };
+    }
+
+    // ── Their own key ────────────────────────────────────────────────
+    const vendor = findVendor(input.vendor);
+    if (!vendor) return { error: "Choose who provides the model." };
+
+    const model = input.model.trim();
+    if (!model) {
+      return {
+        error: `Enter the model id to use${
+          vendor.exampleModels.length > 0 ? ` — for example ${vendor.exampleModels[0]}` : ""
+        }.`,
+      };
+    }
+
+    // A preset's address is ours to supply; "anything else" has to be told.
+    const baseUrl = vendor.customBaseUrl ? input.baseUrl.trim() : vendor.baseUrl;
+    if (vendor.protocol === "openai") {
+      if (!baseUrl) return { error: "Enter the address of the API you want to use." };
+      const unsafe = unsafeEndpointReason(baseUrl);
+      if (unsafe) return { error: unsafe };
+    }
+
+    // Blank means "leave the key alone", so changing only the model does not
+    // wipe a credential nobody retyped. There has to be one already, though.
+    const key = input.apiKey.trim();
+    if (!key && !existing) return { error: `Paste the API key from ${vendor.keySource}.` };
+    if (key && vendor.keyPrefix && !key.startsWith(vendor.keyPrefix)) {
+      return {
+        error: `${vendor.label} keys start with "${vendor.keyPrefix}". Check you copied the key itself and not an id.`,
+      };
+    }
+
+    const data = {
+      protocol: vendor.protocol,
+      vendor: vendor.id,
+      baseUrl: baseUrl ?? null,
+      model,
+      active: true,
+      // Anything saved is a change worth re-testing, so a failure recorded
+      // against the previous key is cleared rather than left to accuse the new
+      // one.
+      lastFailureAt: null,
+      lastFailureNote: null,
+    };
+
+    if (existing) {
+      await db.modelProvider.update({
+        where: { id: existing.id },
+        // A blank key field leaves the stored one alone.
+        data: { ...data, ...(key ? { apiKey: encrypt(key) } : {}) },
+      });
+    } else {
+      // Unreachable without a key: the check above returns first.
+      await db.modelProvider.create({
+        data: { tenantId: user.tenantId, ...data, apiKey: encrypt(key) },
+      });
+    }
+
+    await audit(db, user, "tenant.model_provider_updated", {
+      vendor: vendor.id,
+      protocol: vendor.protocol,
+      model,
+      // Never the key, and never enough of it to be one.
+      keyChanged: Boolean(key),
+    });
+
+    revalidatePath("/admin/settings/model");
+    revalidatePath("/admin/settings/agent");
+    return {
+      ok: `Saved. Customers are now answered on your own ${vendor.label} key — check it works below.`,
+    };
+  });
+}
+
+/**
+ * Asks the provider two questions, in one request, before a customer does.
+ *
+ * Does the key work, and does this model call tools. The second is the one that
+ * catches the expensive mistake: plenty of OpenAI-compatible endpoints
+ * authenticate perfectly and ignore the tools entirely, and the symptom is an
+ * assistant that chats beautifully and never books anything — a fault that looks
+ * like a bad model rather than a bad setup, and that otherwise gets found by a
+ * customer.
+ */
+export async function testModelProvider(): Promise<SettingsFormState> {
+  const user = await requireRole("manager");
+
+  return asTenant(user, async (db) => {
+    const row = await db.modelProvider.findFirst({ where: { tenantId: user.tenantId } });
+    if (!row) return { error: "No key of your own is saved, so there is nothing to check." };
+
+    const vendorLabel = findVendor(row.vendor)?.label ?? row.vendor;
+
+    let result;
+    try {
+      result = await pingProvider({
+        protocol: row.protocol === "anthropic" ? "anthropic" : "openai",
+        apiKey: decrypt(row.apiKey),
+        baseUrl: row.baseUrl,
+        model: row.model,
+        vendorLabel,
+      });
+    } catch (err) {
+      const note = isProviderFailure(err)
+        ? err.note
+        : `Something went wrong reaching ${vendorLabel}.`;
+      await recordProviderFailure(db, user.tenantId, note);
+      revalidatePath("/admin/settings/model");
+      return { error: note };
+    }
+
+    await recordProviderOk(db, user.tenantId);
+    revalidatePath("/admin/settings/model");
+
+    if (!result.toolsWork) {
+      // Not an error — the key is fine. But this model cannot do the part of
+      // the job that matters, and saying "working" here would be a lie that
+      // holds until someone tries to book.
+      return {
+        error:
+          `${vendorLabel} answered, so the key is good — but ${row.model} did not call the tool it was given. ` +
+          `A model that ignores tools can chat, and cannot check availability or book. ` +
+          `Try a model your provider lists as supporting function calling.`,
+      };
+    }
+
+    return { ok: `Working. ${vendorLabel} answered on ${row.model}, and it uses tools correctly.` };
+  });
+}
+
+/** Deletes the saved key. The business goes back to cadence's on the next message. */
+export async function forgetModelProvider(): Promise<SettingsFormState> {
+  const user = await requireRole("owner");
+
+  return asTenant(user, async (db) => {
+    const deleted = await db.modelProvider.deleteMany({ where: { tenantId: user.tenantId } });
+    if (deleted.count === 0) return { error: "There was nothing saved." };
+
+    await audit(db, user, "tenant.model_provider_removed", {});
+    revalidatePath("/admin/settings/model");
+    revalidatePath("/admin/settings/agent");
+    return { ok: "Removed. Customers are answered on cadence's key again." };
+  });
+}
+
+/**
+ * Who changed whose key, and when.
+ *
+ * Recorded for every branch above, because this is the setting that decides
+ * where a business's customer conversations are sent — and "when did we start
+ * sending these somewhere else" is a question that only ever gets asked late.
+ */
+async function audit(
+  db: Parameters<Parameters<typeof asTenant>[1]>[0],
+  user: { id: string; tenantId: string },
+  action: string,
+  after: Prisma.InputJsonObject,
+) {
+  await db.auditLog.create({
+    data: {
+      tenantId: user.tenantId,
+      actor: `user:${user.id}`,
+      action,
+      subject: `Tenant:${user.tenantId}`,
+      after,
+    },
   });
 }

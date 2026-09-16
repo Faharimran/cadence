@@ -30,6 +30,17 @@ const schema = z.object({
   CADENCE_ENCRYPTION_KEY: z.string().min(16).optional(),
   CADENCE_BASE_URL: z.string().url().default("http://localhost:3000"),
   /**
+   * Whether a tenant may point their model endpoint at a private address.
+   *
+   * False on a hosted deployment, and that is not a preference: the endpoint a
+   * tenant saves is fetched by OUR server, so "http://169.254.169.254/…" is a
+   * request to read the cloud provider's instance metadata from inside the
+   * network. True only where cadence runs on the same private network as the
+   * model — a business hosting its own behind vLLM or Ollama, which is a real
+   * deployment and the reason this is a switch rather than a rule.
+   */
+  CADENCE_ALLOW_PRIVATE_MODEL_ENDPOINTS: z.enum(["true", "false"]).default("false"),
+  /**
    * Whether anyone may create a business at /signup. Open by default — a product
    * you cannot sign up for is a bespoke install. Set "false" on a deployment
    * that onboards customers by hand, and the route 404s.

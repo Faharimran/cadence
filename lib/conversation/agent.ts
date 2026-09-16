@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import { formatInTimeZone } from "date-fns-tz";
 import type { TenantDb } from "@/lib/prisma";
 import { env } from "@/lib/env";
@@ -7,9 +7,22 @@ import { CadenceError } from "@/lib/api/errors";
 import { resolveCapabilities } from "@/lib/conversation/capabilities";
 import { getSnapshot, type ServiceSummary } from "@/lib/conversation/snapshot";
 import { buildTools, type ToolContext } from "@/lib/conversation/tools";
-import { loadTranscript, recordOutbound, COLLEAGUE_PREFIX } from "@/lib/conversation/thread";
+import {
+  loadTranscript,
+  pauseBot,
+  recordOutbound,
+  COLLEAGUE_PREFIX,
+} from "@/lib/conversation/thread";
 import { buildKnowledgeContext, type KnowledgeContext } from "@/lib/knowledge";
-import { resolveModel } from "@/lib/conversation/models";
+import {
+  failureResponse,
+  isProviderFailure,
+  recordProviderFailure,
+  recordProviderOk,
+  resolveProvider,
+  type ResolvedProvider,
+} from "@/lib/conversation/providers";
+import { runTurn, type TurnResult } from "@/lib/conversation/drivers";
 
 /**
  * The agent loop.
@@ -24,6 +37,13 @@ import { resolveModel } from "@/lib/conversation/models";
  */
 
 const MAX_ITERATIONS = 12;
+
+/**
+ * A reply, not an essay. Two thousand tokens is several times longer than any
+ * message this assistant should be sending, so it binds only on a model that has
+ * already gone wrong — which is exactly when a ceiling is worth having.
+ */
+const MAX_TOKENS = 2048;
 
 export type AgentTurn = {
   reply: string | null;
@@ -46,27 +66,15 @@ export type AgentTurn = {
   roundTrips?: number;
 };
 
-let client: Anthropic | null = null;
-function anthropic(): Anthropic {
-  if (!env.ANTHROPIC_API_KEY) {
-    throw new CadenceError(
-      "capability_unavailable",
-      "No ANTHROPIC_API_KEY configured — the conversation layer cannot run.",
-    );
-  }
-  client ??= new Anthropic({
-    apiKey: env.ANTHROPIC_API_KEY,
-    // Identity-linked keys belong to a person, not a workspace, so the API
-    // rejects every request that doesn't name the workspace it acts in.
-    // Workspace-scoped keys ignore the header, so sending it when set is
-    // always safe.
-    ...(env.ANTHROPIC_WORKSPACE_ID
-      ? { defaultHeaders: { "anthropic-workspace-id": env.ANTHROPIC_WORKSPACE_ID } }
-      : {}),
-  });
-  return client;
-}
-
+/**
+ * Whether cadence's own key is present.
+ *
+ * Narrower than it looks, and deliberately so: a tenant that has brought its own
+ * key answers customers whether or not this is true. It is the platform default
+ * that is missing without it — the demo, and every business that never opened
+ * the model settings page. Per-tenant readiness is `resolveProvider`'s job,
+ * because only it knows whose key is in play.
+ */
 export function isAgentConfigured(): boolean {
   return Boolean(env.ANTHROPIC_API_KEY);
 }
@@ -115,64 +123,48 @@ export async function runAgentTurn(
     throw new CadenceError("validation_failed", "Nothing to reply to.");
   }
 
-  const toolCalls: { name: string; input: unknown }[] = [];
-
-  // Both chosen by the tenant on Settings → Agent, both defaulting to whatever
-  // the platform currently considers best. Effort is the main cost lever on a
-  // channel that may carry thousands of messages a day, so it is theirs to
-  // spend — and it is omitted entirely for models that do not accept it.
-  const { model, effort } = resolveModel(tenant);
-
-  const runner = anthropic().beta.messages.toolRunner({
-    model,
-    max_tokens: 2048,
-    ...(effort ? { output_config: { effort } } : {}),
-    system: systemPrompt(tenant, caps.list(), knowledge, snapshot),
-    tools,
-    messages: transcript,
-    max_iterations: MAX_ITERATIONS,
-  });
-
-  // Iterate to completion. Breaking out of this loop early abandons the async
-  // iterator that drives the runner, and the `done()` below then never
-  // resolves — a deadlock that only appears on whichever path breaks, which
-  // here was escalation.
+  // Whose key answers this message, and on which protocol.
   //
-  // Stopping the agent after an escalation is therefore enforced in the TOOLS
-  // (they refuse once `outcome.escalated` is set) rather than by cutting the
-  // loop short. Same guarantee, no hang.
-  // Accumulated across the WHOLE loop, not taken from the final message.
+  // A business that has added its own runs on it; everyone else runs on
+  // cadence's, with the model and effort they chose on Settings → Agent. Effort
+  // is the main cost lever on a channel that may carry thousands of messages a
+  // day, so it is theirs to spend — and it is omitted entirely for models that
+  // do not accept it.
   //
-  // A turn that calls three tools is four API calls, each re-sending the entire
-  // prompt, and each billed. Reading usage off the last one reported a quarter
-  // of what the turn actually cost — which is the wrong direction to be wrong
-  // in when the number is used to decide whether the product is affordable.
-  const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-  const roundTrips = { count: 0 };
-  const addUsage = (u: Anthropic.Beta.BetaUsage | undefined) => {
-    if (!u) return;
-    roundTrips.count++;
-    usage.input += u.input_tokens ?? 0;
-    usage.output += u.output_tokens ?? 0;
-    usage.cacheRead += u.cache_read_input_tokens ?? 0;
-    usage.cacheWrite += u.cache_creation_input_tokens ?? 0;
-  };
+  // What this deliberately never does is fall back from one to the other. See
+  // lib/conversation/providers.ts.
+  const provider = await resolveProvider(db, args.tenantId, tenant);
 
-  for await (const message of runner) {
-    addUsage(message.usage);
-    for (const block of message.content) {
-      if (block.type === "tool_use") toolCalls.push({ name: block.name, input: block.input });
-    }
+  let turn: TurnResult;
+  try {
+    turn = await runTurn({
+      protocol: provider.protocol,
+      system: systemPrompt(tenant, caps.list(), knowledge, snapshot),
+      messages: transcript,
+      tools,
+      model: provider.model,
+      effort: provider.effort,
+      maxIterations: MAX_ITERATIONS,
+      maxTokens: MAX_TOKENS,
+      apiKey: provider.apiKey,
+      baseUrl: provider.baseUrl,
+      source: provider.source,
+      vendorLabel: provider.label,
+    });
+  } catch (err) {
+    return await handleProviderFailure(db, args, provider, err);
   }
 
-  const final = await runner.done();
-  // `done()` resolves to the last message the loop already yielded, so counting
-  // it again would inflate every turn by one round trip.
-  const reply = final.content
-    .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
-    .map((b) => b.text.trim())
-    .filter(Boolean)
-    .join("\n\n");
+  // Recorded on the way past, because the only request that proves a key works
+  // is a real one — and only when there is something to change, so a busy
+  // tenant does not pay for an UPDATE per message saying what the last one said.
+  // Clears any failure still showing on the settings page.
+  if (provider.source === "tenant" && provider.shouldRecordOk) {
+    await recordProviderOk(db, args.tenantId);
+  }
+
+  const { toolCalls, usage, roundTrips } = turn;
+  const reply = turn.text;
 
   if (reply) {
     await recordOutbound(db, {
@@ -201,7 +193,81 @@ export async function runAgentTurn(
     bookingIds: outcome.bookingIds,
     toolCalls,
     usage,
-    roundTrips: roundTrips.count,
+    roundTrips,
+  };
+}
+
+/**
+ * What happens to a customer when the business's own key will not answer.
+ *
+ * The distinction that decides it is in `ProviderFailure`: whether waiting
+ * helps.
+ *
+ * A rate limit or a bad gateway is transient, and the queue already retries
+ * three times with backoff — the right answer is to let it. Pausing the thread
+ * for one of those would be worse than the fault: a paused thread needs a person
+ * to hand it back, so a thirty-second wobble at the provider would leave a
+ * business with an inbox of conversations to manually resume.
+ *
+ * A revoked key, an empty balance or a model id that does not exist is none of
+ * those. It will still be broken in three retries' time, and the customer spends
+ * every one of them waiting. So the thread goes to a person NOW, the reason is
+ * written where the owner will see it, and nothing invents a reply on the
+ * business's behalf — the assistant has nothing approved to say about its own
+ * billing arrangements.
+ *
+ * cadence's own key never lands here: an outage on our side is ours to fix and
+ * ours to be paged about, and pausing every tenant's threads over it would turn
+ * a ten-minute incident into a day of manual inbox work for every customer.
+ */
+async function handleProviderFailure(
+  db: TenantDb,
+  args: { tenantId: string; conversationId: string },
+  provider: ResolvedProvider,
+  err: unknown,
+): Promise<AgentTurn> {
+  if (!isProviderFailure(err)) throw err;
+
+  if (failureResponse(provider.source, err.kind) === "retry") {
+    // Not recorded, deliberately. This throw rolls the transaction back, so a
+    // row written here would never land — and writing it on the owner
+    // connection to survive that would put the conversation layer outside the
+    // isolation every other query in it obeys.
+    logger.warn("model provider unavailable", {
+      tenantId: args.tenantId,
+      conversationId: args.conversationId,
+      source: provider.source,
+      status: err.status,
+      note: err.note,
+    });
+    throw err;
+  }
+
+  await recordProviderFailure(db, args.tenantId, err.note);
+  await pauseBot(db, args);
+  await db.auditLog.create({
+    data: {
+      tenantId: args.tenantId,
+      actor: "system:agent",
+      action: "tenant.model_provider_failed",
+      subject: `Conversation:${args.conversationId}`,
+      after: { note: err.note, status: err.status ?? null },
+    },
+  });
+
+  logger.error("tenant model provider rejected the turn", {
+    tenantId: args.tenantId,
+    conversationId: args.conversationId,
+    status: err.status,
+    note: err.note,
+  });
+
+  return {
+    reply: null,
+    escalated: true,
+    escalationReasons: ["provider_unavailable"],
+    bookingIds: [],
+    toolCalls: [],
   };
 }
 

@@ -75,6 +75,17 @@ async, and route handlers are uncached by default.
    and an operator session cannot open a tenant admin. `scripts/provePlatform.ts` asserts
    both, and requires each page to return 200 before trusting a negative assertion.
 
+10. **Whose key answers is data; how to speak to it is code.** A business may run its
+   conversations on its own model credentials (`ModelProvider`) or on cadence's, and no
+   row means ours. The endpoint and the model id are theirs to type; the wire protocol is
+   a closed set of two — `anthropic` and `openai` — each with a driver under
+   `lib/conversation/drivers/`. Adding DeepSeek or Groq is a row in `VENDORS`; adding a
+   protocol is a driver someone wrote and read. There is deliberately **no fallback
+   between a tenant's key and the platform's**: a credential failure hands the thread to a
+   colleague (`failureResponse`), because silently spending ours is a bill they never
+   agreed to and a broken integration nobody would notice. Ingestion stays on the platform
+   key. `scripts/proveModelProviders.ts` asserts all of it, without calling a model.
+
 ## What cadence is not
 
 It books **appointments** — something a customer occupies for a duration. Retail and food
@@ -86,7 +97,8 @@ bridges that gap. Say so rather than stretching the model to fit.
 | Path | Holds |
 |---|---|
 | `lib/engine/` | Availability, holds, bookings, promotions. The sellable core. |
-| `lib/conversation/` | Agent loop, tool assembly, snapshots. |
+| `lib/conversation/` | Agent loop, tool assembly, snapshots, and which provider answers. |
+| `lib/conversation/drivers/` | One per wire protocol. The only place a model is actually called. |
 | `lib/knowledge/` | Retrieval, PDF extraction, chunking, ingestion. |
 | `lib/platform/` | Operator console: its own session, guard and metrics. |
 | `lib/channels/` | WhatsApp, web widget, etc. Transport only. |

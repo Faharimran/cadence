@@ -319,7 +319,11 @@ void syncSheetLinks();
 
 logger.info("worker started", {
   queues: [AGENT_TURN_QUEUE, INGEST_QUEUE, "webhook-outbox"],
-  agent: isAgentConfigured() ? "configured" : "NO ANTHROPIC_API_KEY — turns will fail",
+  agent: isAgentConfigured()
+    ? "configured"
+    // Not fatal any more: a tenant that brought its own key is answered
+    // from it. Everyone on the platform default is not.
+    : "no ANTHROPIC_API_KEY — only tenants with their own key can be answered",
 });
 
 async function shutdown(signal: string) {

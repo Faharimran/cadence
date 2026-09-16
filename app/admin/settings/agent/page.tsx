@@ -4,6 +4,7 @@ import { resolveCapabilities } from "@/lib/conversation/capabilities";
 import { buildKnowledgeContext } from "@/lib/knowledge";
 import { systemPrompt } from "@/lib/conversation/agent";
 import { resolveModel, MODELS, EFFORTS } from "@/lib/conversation/models";
+import { getProviderSummary } from "@/lib/conversation/providers";
 import { VoiceForm } from "../forms";
 import { AgentForm } from "./forms";
 import { Empty, PageHeader, Pill, Section } from "../../ui";
@@ -13,8 +14,9 @@ export const dynamic = "force-dynamic";
 export default async function AgentPage() {
   const user = await requireUser();
 
-  const { tenant, prompt } = await asTenant(user, async (db) => {
+  const { tenant, prompt, provider } = await asTenant(user, async (db) => {
     const tenant = await db.tenant.findFirstOrThrow({ where: { id: user.tenantId } });
+    const provider = await getProviderSummary(db, user.tenantId);
     const caps = await resolveCapabilities(db, user.tenantId);
     const knowledge = caps.has("knowledge")
       ? await buildKnowledgeContext(db, user.tenantId)
@@ -29,13 +31,18 @@ export default async function AgentPage() {
       .map((b) => b.text)
       .join("\n\n");
 
-    return { tenant, prompt };
+    return { tenant, prompt, provider };
   });
 
   const isManager = can(user, "manager");
   const { model, effort } = resolveModel(tenant);
   const modelLabel = MODELS.find((m) => m.id === model)?.label ?? model;
   const effortLabel = EFFORTS.find((e) => e.id === effort)?.label;
+
+  // What is actually answering, which is not always what the cards below say.
+  const byo = provider?.active
+    ? { vendorLabel: provider.vendorLabel, model: provider.model }
+    : null;
 
   return (
     <div className="flex flex-col gap-10">
@@ -45,14 +52,23 @@ export default async function AgentPage() {
       />
 
       <div className="flex flex-wrap items-center gap-3">
-        <Pill>{modelLabel}</Pill>
-        {effortLabel && <Pill>{effortLabel}</Pill>}
+        {byo ? (
+          <>
+            <Pill tone="ok">your own {byo.vendorLabel} key</Pill>
+            <Pill>{byo.model}</Pill>
+          </>
+        ) : (
+          <>
+            <Pill>{modelLabel}</Pill>
+            {effortLabel && <Pill>{effortLabel}</Pill>}
+          </>
+        )}
         <Pill tone={tenant.agentInstructions ? "ok" : undefined}>
           {tenant.agentInstructions ? "your instructions are in use" : "no instructions written yet"}
         </Pill>
         <Link
           href="/admin/settings"
-          className="ml-auto font-mono text-[11px] text-ink-3 underline underline-offset-2 hover:text-ink"
+          className="ml-auto text-[11px] text-ink-3 underline underline-offset-2 hover:text-ink"
         >
           back to settings
         </Link>
@@ -75,7 +91,7 @@ export default async function AgentPage() {
           aren&apos;t written down anywhere but that everyone who works here knows.
         </p>
         {isManager ? (
-          <AgentForm tenant={tenant} />
+          <AgentForm tenant={tenant} byo={byo} />
         ) : (
           <Empty>Only managers and owners can change this.</Empty>
         )}
@@ -92,10 +108,10 @@ export default async function AgentPage() {
           This is not a summary — it is the text itself, exactly as the assistant receives it before
           each reply. The only thing missing is the current date and time, which changes every turn.
         </p>
-        <pre className="max-h-[36rem] overflow-auto rounded-2xl border border-line bg-surface-2 p-5 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap text-ink-2">
+        <pre className="max-h-[36rem] overflow-auto rounded-2xl border border-rule bg-surface-2 p-5 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap text-ink-2">
           {prompt}
         </pre>
-        <p className="mt-3 font-mono text-[11px] text-ink-3">
+        <p className="num mt-3 text-[11px] text-ink-3">
           {prompt.length.toLocaleString()} characters
         </p>
       </Section>

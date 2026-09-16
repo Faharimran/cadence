@@ -51,6 +51,7 @@ const TENANT_SCOPED_TABLES = [
   "SheetLink",
   "ImportRun",
   "ChannelAccount",
+  "ModelProvider",
   "IdempotencyRecord",
   "WebhookEndpoint",
   "WebhookDelivery",

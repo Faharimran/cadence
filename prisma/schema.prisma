@@ -117,6 +117,7 @@ model Tenant {
   promotions       Promotion[]
   conversations    Conversation[]
   channelAccounts  ChannelAccount[]
+  modelProvider    ModelProvider?
   webhookEndpoints WebhookEndpoint[]
   auditLogs        AuditLog[]
   knowledgeDocs    KnowledgeDoc[]
@@ -133,6 +134,60 @@ model Tenant {
 /// tenant, because the sign-in form asks only for an email — requiring people to
 /// also type which business they work for is a worse trade than the rare case of
 /// someone needing two logins for two businesses.
+/// A tenant's own model credentials — bring your own key.
+///
+/// One row per tenant, and its absence is the point: no row, or `active` false,
+/// means conversations run on cadence's platform key. That is what every
+/// business gets until it decides otherwise, and switching back is a boolean
+/// rather than a deletion, so nobody has to paste a key twice.
+model ModelProvider {
+  id       String @id @default(cuid())
+  tenantId String @unique
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// The wire protocol — a closed set the engine owns. "anthropic" speaks the
+  /// Messages API; "openai" speaks chat-completions, which is what DeepSeek,
+  /// Groq, OpenRouter, Mistral and anything self-hosted behind vLLM all answer.
+  /// Every vendor a business might name is one of these two on the wire.
+  ///
+  /// Which endpoint and which model are data. How to speak to them is code —
+  /// the same line vocabulary/behaviour is drawn on everywhere else here.
+  protocol String
+
+  /// Which vendor this was set up as ("deepseek", "custom", …). Presentation
+  /// and provenance only. Nothing branches on it.
+  vendor String
+
+  /// Where to send it. Null means the protocol's own default host.
+  baseUrl String?
+
+  /// Encrypted at rest by lib/crypto.ts. Never rendered back to a browser,
+  /// never selected by lib/platform/metrics.ts, and unlike an ApiKey it cannot
+  /// be hashed — we have to spend it, not verify it.
+  apiKey String
+
+  /// Free text, deliberately. The models a tenant may pick on cadence's key are
+  /// a closed list because we pay for them; on their own key the catalogue is
+  /// theirs, and it changes faster than we would ship a list.
+  model String
+
+  /// False = saved, not in use. See the model comment above.
+  active Boolean @default(true)
+
+  /// When this key last worked, and when it last did not.
+  ///
+  /// Written by the agent as it passes, because the failure mode here is
+  /// silent: a revoked key, an exhausted balance and a quiet afternoon all look
+  /// identical from the admin. The settings page reads these so the business
+  /// finds out from us rather than from a customer who was never answered.
+  lastOkAt        DateTime?
+  lastFailureAt   DateTime?
+  lastFailureNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model User {
   id       String @id @default(cuid())
   tenantId String

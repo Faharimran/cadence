@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import { saveAgent, type SettingsFormState } from "../actions";
 import { Button, Field, inputClass, labelClass } from "../../ui";
@@ -10,13 +11,13 @@ const textareaClass = `${inputClass} resize-y font-sans leading-relaxed`;
 function Feedback({ state }: { state: SettingsFormState }) {
   if (state?.error)
     return (
-      <p role="alert" className="text-sm" style={{ color: "var(--bad)" }}>
+      <p role="alert" className="txt-bad text-sm">
         {state.error}
       </p>
     );
   if (state?.ok)
     return (
-      <p role="status" className="text-sm" style={{ color: "var(--ok)" }}>
+      <p role="status" className="txt-good text-sm">
         {state.ok}
       </p>
     );
@@ -50,7 +51,7 @@ function ChoiceCards({
           <label
             key={o.id}
             className={`flex cursor-pointer flex-col gap-1.5 rounded-2xl border p-4 transition-colors ${
-              active ? "border-accent bg-accent/5" : "border-line hover:border-ink-3"
+              active ? "border-accent bg-accent/5" : "border-rule hover:border-ink-3"
             }`}
           >
             <span className="flex items-center gap-2">
@@ -96,7 +97,7 @@ function InstructionCost({ chars }: { chars: number }) {
     <p className="text-[11px] text-ink-3">
       About {tokens.toLocaleString()} tokens, re-sent with every message.
       {heavy && (
-        <span style={{ color: "var(--warn)" }}>
+        <span className="txt-warn">
           {" "}
           That is a large share of what the assistant reads each time — worth keeping if you need
           it, worth trimming if any of it has stopped being true.
@@ -108,6 +109,7 @@ function InstructionCost({ chars }: { chars: number }) {
 
 export function AgentForm({
   tenant,
+  byo,
 }: {
   tenant: {
     name: string;
@@ -115,6 +117,16 @@ export function AgentForm({
     agentModel: string | null;
     agentEffort: string | null;
   };
+  /**
+   * Set when this business answers on its own key.
+   *
+   * The cards below choose from the models cadence pays for, which is not what
+   * is running when someone has brought their own — showing them anyway would
+   * mean a page that says "Balanced" while every message goes to DeepSeek. The
+   * saved values are still submitted, so switching back next month finds the
+   * choice exactly where it was left.
+   */
+  byo: { vendorLabel: string; model: string } | null;
 }) {
   const [state, action, pending] = useActionState<SettingsFormState, FormData>(saveAgent, null);
   const [instructions, setInstructions] = useState(tenant.agentInstructions ?? "");
@@ -150,24 +162,57 @@ If they mention they're coming for a wedding, say congratulations.`}
         </p>
       </div>
 
-      <div className="flex flex-col gap-3">
-        <span className={labelClass}>Which model answers</span>
-        <ChoiceCards name="agentModel" options={MODELS} initial={tenant.agentModel ?? DEFAULT_MODEL} />
-      </div>
+      {byo ? (
+        <div className="flex flex-col gap-3">
+          <span className={labelClass}>Which model answers</span>
+          <div className="rounded-2xl border border-rule bg-surface-2 p-4">
+            <p className="text-sm text-ink-2">
+              Your own {byo.vendorLabel} key, running{" "}
+              <span className="font-mono text-[12px] text-ink">{byo.model}</span>. Change it on{" "}
+              <Link
+                href="/admin/settings/model"
+                className="underline underline-offset-2 hover:text-ink"
+              >
+                which API key answers
+              </Link>
+              .
+            </p>
+            <p className="mt-2 text-[12px] leading-relaxed text-ink-3">
+              The model and effort you picked for cadence&apos;s key are kept as they are, for if
+              you switch back.
+            </p>
+          </div>
+          {/* Submitted but not shown. Dropping them would make saving these
+              instructions silently reset a model choice nobody touched. */}
+          <input type="hidden" name="agentModel" value={tenant.agentModel ?? DEFAULT_MODEL} />
+          <input type="hidden" name="agentEffort" value={tenant.agentEffort ?? DEFAULT_EFFORT} />
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3">
+            <span className={labelClass}>Which model answers</span>
+            <ChoiceCards
+              name="agentModel"
+              options={MODELS}
+              initial={tenant.agentModel ?? DEFAULT_MODEL}
+            />
+          </div>
 
-      <div className="flex flex-col gap-3">
-        <span className={labelClass}>How carefully it thinks</span>
-        <ChoiceCards
-          name="agentEffort"
-          options={EFFORTS}
-          initial={tenant.agentEffort ?? DEFAULT_EFFORT}
-        />
-        <p className="max-w-[70ch] text-[12px] leading-relaxed text-ink-3">
-          This is the setting that most affects what you pay per message. If your customers mainly
-          ask simple questions, Quick is genuinely enough. Ignored by the fastest model, which has
-          one speed.
-        </p>
-      </div>
+          <div className="flex flex-col gap-3">
+            <span className={labelClass}>How carefully it thinks</span>
+            <ChoiceCards
+              name="agentEffort"
+              options={EFFORTS}
+              initial={tenant.agentEffort ?? DEFAULT_EFFORT}
+            />
+            <p className="max-w-[70ch] text-[12px] leading-relaxed text-ink-3">
+              This is the setting that most affects what you pay per message. If your customers
+              mainly ask simple questions, Quick is genuinely enough. Ignored by the fastest model,
+              which has one speed.
+            </p>
+          </div>
+        </>
+      )}
 
       <div className="flex items-center gap-4">
         <Button type="submit" disabled={pending}>

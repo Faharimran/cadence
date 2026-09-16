@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireUser, asTenant, can } from "@/lib/auth/guard";
 import { LocationForm, ExceptionTypeForm } from "./forms";
 import { resolveModel, MODELS } from "@/lib/conversation/models";
+import { getProviderSummary } from "@/lib/conversation/providers";
 import { Empty, PageHeader, Pill, Row, Section } from "../ui";
 
 export const dynamic = "force-dynamic";
@@ -9,8 +10,8 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const user = await requireUser();
 
-  const { locations, types, channel, users, tenant } = await asTenant(user, async (db) => {
-    const [locations, types, channel, users, tenant] = await Promise.all([
+  const { locations, types, channel, users, tenant, provider } = await asTenant(user, async (db) => {
+    const [locations, types, channel, users, tenant, provider] = await Promise.all([
       db.location.findMany({ where: { tenantId: user.tenantId }, orderBy: { name: "asc" } }),
       db.exceptionType.findMany({
         where: { tenantId: user.tenantId },
@@ -19,8 +20,9 @@ export default async function SettingsPage() {
       db.channelAccount.findFirst({ where: { tenantId: user.tenantId, channel: "whatsapp" } }),
       db.user.findMany({ where: { tenantId: user.tenantId }, orderBy: { email: "asc" } }),
       db.tenant.findFirstOrThrow({ where: { id: user.tenantId } }),
+      getProviderSummary(db, user.tenantId),
     ]);
-    return { locations, types, channel, users, tenant };
+    return { locations, types, channel, users, tenant, provider };
   });
 
   // The owner-only check moved with the WhatsApp form to its own page.
@@ -57,9 +59,42 @@ export default async function SettingsPage() {
 
         <Link
           href="/admin/settings/agent"
-          className="mt-4 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="btn mt-4"
         >
           {tenant.agentInstructions ? "Open" : "Tell it how to work"}
+        </Link>
+      </Section>
+
+      {/* ── Whose key ─────────────────────────────────────────────── */}
+      {/* Sits next to the assistant because it is the same decision seen from
+          the billing side, and separate from it because most businesses will
+          never open it. The pill is the whole point: whose account is being
+          spent should be readable without clicking anything. */}
+      <Section title="Which API key answers" boxed>
+        <div className="flex flex-wrap items-center gap-3">
+          {provider?.active && provider.lastFailureNote ? (
+            <Pill tone="bad">your key is failing</Pill>
+          ) : provider?.active ? (
+            <Pill tone="ok">your own {provider.vendorLabel} key</Pill>
+          ) : (
+            <Pill>cadence&apos;s key</Pill>
+          )}
+          {provider?.active && (
+            <span className="num text-xs text-ink-2">{provider.model}</span>
+          )}
+        </div>
+
+        <p className="mt-3 max-w-[66ch] text-sm text-ink-2">
+          {provider?.active
+            ? "Conversations are billed to your own provider account, not to us."
+            : "Nothing to set up. If you already pay for Claude, DeepSeek, OpenAI or a model you host yourself, you can use that key instead."}
+        </p>
+
+        <Link
+          href="/admin/settings/model"
+          className="btn mt-4"
+        >
+          {provider ? "Open" : "Use your own key"}
         </Link>
       </Section>
 
@@ -79,9 +114,9 @@ export default async function SettingsPage() {
           <ul className="flex flex-col gap-2">
             {locations.map((l) => (
               <Row key={l.id}>
-                <span className="font-mono text-sm font-semibold">{l.name}</span>
+                <span className="num text-sm font-semibold">{l.name}</span>
                 {l.code && <Pill>{l.code}</Pill>}
-                <span className="font-mono text-xs text-ink-2">{l.timezone}</span>
+                <span className="num text-xs text-ink-2">{l.timezone}</span>
                 {!l.active && <Pill tone="bad">inactive</Pill>}
               </Row>
             ))}
@@ -110,12 +145,12 @@ export default async function SettingsPage() {
           <ul className="flex flex-col gap-2">
             {types.map((t) => (
               <Row key={t.id}>
-                <span className="font-mono text-sm font-semibold">{t.label}</span>
-                <span className="font-mono text-[11px] text-ink-3">{t.code}</span>
+                <span className="num text-sm font-semibold">{t.label}</span>
+                <span className="num text-[11px] text-ink-3">{t.code}</span>
                 <Pill tone={t.effect === "add" ? "ok" : "bad"}>
                   {t.effect === "add" ? "adds time" : "removes time"}
                 </Pill>
-                <span className="font-mono text-[11px] text-ink-3">
+                <span className="num text-[11px] text-ink-3">
                   priority {t.defaultPriority}
                 </span>
                 {t.requiresApproval && <Pill tone="warn">needs approval</Pill>}
@@ -148,7 +183,7 @@ export default async function SettingsPage() {
             <Pill tone="warn">not connected</Pill>
           )}
           {channel?.displayNumber && (
-            <span className="font-mono text-xs text-ink-2">{channel.displayNumber}</span>
+            <span className="num text-xs text-ink-2">{channel.displayNumber}</span>
           )}
         </div>
 
@@ -160,7 +195,7 @@ export default async function SettingsPage() {
 
         <Link
           href="/admin/settings/whatsapp"
-          className="mt-4 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="btn mt-4"
         >
           {channel ? "Open the setup guide" : "Connect WhatsApp — step by step"}
         </Link>
@@ -171,7 +206,7 @@ export default async function SettingsPage() {
         <ul className="flex flex-col gap-2">
           {users.map((u) => (
             <Row key={u.id}>
-              <span className="font-mono text-sm">{u.email}</span>
+              <span className="text-sm">{u.email}</span>
               <Pill>{u.role}</Pill>
               {!u.active && <Pill tone="bad">disabled</Pill>}
               {u.id === user.id && <span className="text-xs text-ink-3">that&apos;s you</span>}
