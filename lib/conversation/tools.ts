@@ -327,7 +327,10 @@ export function buildTools(ctx: ToolContext) {
       betaZodTool({
         name: "cancel_booking",
         description:
-          "Cancel an existing booking at the customer's request. Only ever call this when they have clearly asked to cancel.",
+          "Cancel one of THIS customer's existing bookings, at their request. Only ever call this when they have " +
+          "clearly asked to cancel — 'I might not make it' is not a cancellation. Use an id from their own list of " +
+          "bookings; any other id fails as 'not_found'. The time goes back on sale the moment this succeeds, so it " +
+          "is not something to undo — if you are unsure which booking they mean, ask before calling this.",
         inputSchema: z.object({
           bookingId: z.string(),
           reason: z.string().max(300).optional(),
@@ -339,9 +342,24 @@ export function buildTools(ctx: ToolContext) {
               tenantId: ctx.tenantId,
               bookingId,
               reason: reason ?? "customer request",
+              // The customer is the caller here, so they may only cancel their
+              // own. Somebody else's booking comes back as not_found rather
+              // than as a refusal, which is the same shape a made-up id gets —
+              // nothing about another customer's diary is confirmed or denied.
+              customerId: ctx.customerId,
             });
             await invalidateSnapshot(ctx.conversationId);
-            return json({ ok: true, bookingId: booking.id, status: booking.status });
+            return json({
+              ok: true,
+              bookingId: booking.id,
+              status: booking.status,
+              // Returned so the reply can name what was cancelled rather than
+              // saying "done", and so it can say the time is free again — which
+              // is true the instant this returns: availability is computed from
+              // the bookings that are still active, never from a stored flag.
+              startsAt: booking.startsAt.toISOString(),
+              slotReleased: true,
+            });
           } catch (err) {
             return json(fail(err));
           }

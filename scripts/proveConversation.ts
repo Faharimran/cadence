@@ -465,6 +465,107 @@ async function main() {
   });
 
   // ────────────────────────────────────────────────────────────────────
+  // A cancellation has to do two things, and the second is the one worth
+  // asserting: end this customer's appointment, and put the time back on sale.
+  //
+  // The second is only true because availability is COMPUTED — the query
+  // subtracts the bookings that are still active, so a cancelled one stops
+  // subtracting the moment it is cancelled. If anything ever stores "this slot
+  // is taken", this is the check that catches it.
+  console.log("\n4b. Cancelling frees the time for someone else");
+
+  const bookedSlot = target.toISOString();
+  let cancelledId = "";
+
+  await withTenant(t, async (db) => {
+    const { tools } = await makeCtx(db, t, thread.conversationId, thread.customerId);
+
+    const mine = await call(tool(tools, "list_my_bookings"), {});
+    const booking = (mine.bookings ?? []).find((b: { startsAt: string }) => b.startsAt === bookedSlot);
+    check("the customer can see the booking they just made", Boolean(booking));
+    cancelledId = booking?.id ?? "";
+
+    // The whole day, not an hour around the slot: this service runs 120
+    // minutes plus a buffer, so a narrow window returns nothing at all and
+    // "the time is not offered" passes for the wrong reason.
+    const before = await call(tool(tools, "check_availability"), {
+      serviceId: session.id,
+      locationId: london.id,
+      from: from.toISOString(),
+      to: to.toISOString(),
+    });
+    check("the day has times on it to begin with", (before.slots ?? []).length > 0);
+    check(
+      "while it stands, that time is not offered to anyone",
+      !(before.slots ?? []).some((slot: { startsAt: string }) => slot.startsAt === bookedSlot),
+    );
+  });
+
+  // Somebody else's thread, with the id in hand. It must fail — and fail the
+  // way a made-up id fails, so nothing about another customer's diary leaks.
+  await withTenant(t, async (db) => {
+    const { tools } = await makeCtx(db, t, rival.conversationId, rival.customerId);
+    const out = await call(tool(tools, "cancel_booking"), { bookingId: cancelledId });
+    check("another customer cannot cancel it", out.ok === false);
+    check("and is told nothing about it", out.reason === "not_found", out.reason);
+  });
+  const survived = await adminDb.booking.findUniqueOrThrow({ where: { id: cancelledId } });
+  check("the booking is untouched by that attempt", survived.status === "scheduled");
+
+  await withTenant(t, async (db) => {
+    const { tools } = await makeCtx(db, t, thread.conversationId, thread.customerId);
+    const out = await call(tool(tools, "cancel_booking"), {
+      bookingId: cancelledId,
+      reason: "can't make it",
+    });
+    check("the customer can cancel their own", out.ok === true, JSON.stringify(out).slice(0, 120));
+    check("it comes back cancelled", out.status === "cancelled", out.status);
+    check("and says the time was released", out.slotReleased === true);
+    check("naming when it was", out.startsAt === bookedSlot);
+  });
+
+  await withTenant(t, async (db) => {
+    const { tools } = await makeCtx(db, t, thread.conversationId, thread.customerId);
+    const mine = await call(tool(tools, "list_my_bookings"), {});
+    check(
+      "it leaves their upcoming list at once",
+      !(mine.bookings ?? []).some((b: { id: string }) => b.id === cancelledId),
+    );
+  });
+
+  // The whole point: somebody else can have it now.
+  await withTenant(t, async (db) => {
+    const { tools } = await makeCtx(db, t, rival.conversationId, rival.customerId);
+    const after = await call(tool(tools, "check_availability"), {
+      serviceId: session.id,
+      locationId: london.id,
+      from: from.toISOString(),
+      to: to.toISOString(),
+    });
+    check(
+      "the freed time is offered to another customer",
+      (after.slots ?? []).some((slot: { startsAt: string }) => slot.startsAt === bookedSlot),
+      "a cancellation that does not free the slot is a slot lost for good",
+    );
+
+    const out = await call(tool(tools, "hold_slot"), {
+      serviceId: session.id,
+      locationId: london.id,
+      startsAt: bookedSlot,
+    });
+    check("and they can hold it", out.ok === true, JSON.stringify(out).slice(0, 120));
+    if (out.holdId) {
+      await call(tool(tools, "cancel_booking"), { bookingId: out.holdId, reason: "tidying up" });
+    }
+  });
+
+  // Nothing was deleted — the cancelled booking is still there to be audited.
+  const cancelled = await adminDb.booking.findUniqueOrThrow({ where: { id: cancelledId } });
+  check("the cancelled booking is kept, not deleted", cancelled.status === "cancelled");
+  check("with the reason the customer gave", cancelled.cancelReason === "can't make it");
+  check("and a time it happened", cancelled.cancelledAt !== null);
+
+  // ────────────────────────────────────────────────────────────────────
   console.log("\n5. An opted-out customer is refused before anything happens");
   await adminDb.customer.update({ where: { id: thread.customerId }, data: { optedOut: true } });
   await withTenant(t, async (db) => {

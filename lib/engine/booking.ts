@@ -254,10 +254,29 @@ export async function confirmHold(
  */
 export async function cancelBooking(
   db: TenantDb,
-  args: { tenantId: string; bookingId: string; reason?: string; status?: "cancelled" | "no_show" | "needs_rebooking" },
+  args: {
+    tenantId: string;
+    bookingId: string;
+    reason?: string;
+    status?: "cancelled" | "no_show" | "needs_rebooking";
+    /**
+     * Restricts the cancellation to one customer's own booking.
+     *
+     * Passed by the conversation layer, where the caller is the customer, and
+     * omitted by the admin, where a colleague may cancel anybody's. It goes in
+     * the WHERE rather than into a check afterwards, on the same principle as
+     * the row-level policies: a booking that is not theirs is not found, so
+     * there is no second branch to forget.
+     */
+    customerId?: string;
+  },
 ) {
   const booking = await db.booking.findFirst({
-    where: { id: args.bookingId, tenantId: args.tenantId },
+    where: {
+      id: args.bookingId,
+      tenantId: args.tenantId,
+      ...(args.customerId ? { customerId: args.customerId } : {}),
+    },
   });
   if (!booking) throw new CadenceError("not_found", "Unknown booking.");
 
