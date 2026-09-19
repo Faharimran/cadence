@@ -1,5 +1,5 @@
 /**
- * Creates or updates an operator — someone who runs cadence itself.
+ * Creates or updates an operator — someone who runs enori itself.
  *
  * There is deliberately no sign-up for this and no invite flow in the console.
  * Adding a person who can see every customer on the platform should require

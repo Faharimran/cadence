@@ -45,7 +45,7 @@ const Body = z.object({
 });
 
 /**
- * Said by cadence, never by the business.
+ * Said by enori, never by the business.
  *
  * Once `escalate_to_human` fires, the conversation is paused and belongs to a
  * person. In production a colleague picks it up from the inbox; here there is

@@ -32,7 +32,7 @@ export type DemoPersonaView = {
 type Message =
   | { role: "visitor"; text: string }
   | { role: "agent"; text: string; tools: string[] }
-  /** cadence speaking about the conversation, never the business speaking. */
+  /** enori speaking about the conversation, never the business speaking. */
   | { role: "system"; text: string };
 
 /**

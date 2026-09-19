@@ -55,7 +55,7 @@ export function ProviderForm({
 }: {
   vendors: VendorOption[];
   current: CurrentProvider;
-  /** What cadence's own key would run, so the choice is a comparison. */
+  /** What enori's own key would run, so the choice is a comparison. */
   cadenceModelLabel: string;
 }) {
   const [state, action, pending] = useActionState<SettingsFormState, FormData>(
@@ -63,7 +63,7 @@ export function ProviderForm({
     null,
   );
 
-  const [source, setSource] = useState<"cadence" | "own">(current?.active ? "own" : "cadence");
+  const [source, setSource] = useState<"platform" | "own">(current?.active ? "own" : "platform");
   const [vendorId, setVendorId] = useState(current?.vendor ?? vendors[0]?.id ?? "anthropic");
   const [baseUrl, setBaseUrl] = useState(current?.baseUrl ?? "");
   const [model, setModel] = useState(current?.model ?? "");
@@ -75,10 +75,10 @@ export function ProviderForm({
     <form action={action} className="flex flex-col gap-8">
       <div className="grid gap-3 sm:grid-cols-2">
         <SourceCard
-          checked={source === "cadence"}
-          onSelect={() => setSource("cadence")}
-          value="cadence"
-          title="cadence's key"
+          checked={source === "platform"}
+          onSelect={() => setSource("platform")}
+          value="platform"
+          title="enori's key"
           blurb={`Nothing to set up. Answers run on the model you picked — ${cadenceModelLabel.toLowerCase()} — billed as part of what you pay us.`}
         />
         <SourceCard
@@ -244,7 +244,7 @@ function SourceCard({
 /**
  * Removing the key, kept away from the form above.
  *
- * Switching back to cadence's key does not delete anything — this does, and it
+ * Switching back to enori's key does not delete anything — this does, and it
  * is the only thing here that cannot be undone by clicking the other card.
  */
 export function ForgetKey() {

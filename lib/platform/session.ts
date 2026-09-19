@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { env } from "@/lib/env";
 
 /**
- * Sessions for people who run cadence, kept structurally separate from the ones
+ * Sessions for people who run enori, kept structurally separate from the ones
  * for people who run a business on it.
  *
  * Three separations, and each closes a different door:

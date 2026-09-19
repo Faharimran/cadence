@@ -150,11 +150,11 @@ export default async function WhatsAppGuidePage() {
           <p className="max-w-[70ch]">
             Your webhook address is currently{" "}
             <code className="font-mono text-[12px]">{base}</code>. WhatsApp has to be able to reach
-            cadence over the internet, and it cannot reach an address like that. Every step below
+            enori over the internet, and it cannot reach an address like that. Every step below
             will appear to work and no message will ever arrive.
           </p>
           <p className="mt-1.5 max-w-[70ch]">
-            Ask whoever set cadence up for you to give it a public web address first. Nothing else
+            Ask whoever set enori up for you to give it a public web address first. Nothing else
             on this page will help until they have.
           </p>
         </Notice>
@@ -200,14 +200,14 @@ export default async function WhatsAppGuidePage() {
 
         {savedVerifyToken && (
           <Callout tone="warn" title="Meta must have this exact text.">
-            This is what cadence has stored, shown so you can check it against what you typed into
+            This is what enori has stored, shown so you can check it against what you typed into
             Meta. If they differ by even one character, Meta reports that the callback URL could
             not be validated — and neither screen tells you which half is wrong.
           </Callout>
         )}
         <p className="mt-3 max-w-[72ch] text-[12px] text-ink-3">
           The verify token is a password you make up. Meta does not care what it says — it exists so
-          cadence can tell that a webhook call is really yours. Put the <em>same</em> text in both
+          enori can tell that a webhook call is really yours. Put the <em>same</em> text in both
           places and it will match. It is used once, during setup; after that, messages are checked
           with the app secret instead.
         </p>
@@ -292,12 +292,12 @@ export default async function WhatsAppGuidePage() {
               ]}
             />
             <p>
-              Click <Btn>Verify and save</Btn>. Meta immediately calls cadence to check the token
+              Click <Btn>Verify and save</Btn>. Meta immediately calls enori to check the token
               matches.
             </p>
             <Callout tone="ok" title="If it saves without an error, that half is done.">
               You must have saved the verify token in the form below <em>first</em> — Meta is
-              checking it against what cadence has stored. If you have not, save the form, then come
+              checking it against what enori has stored. If you have not, save the form, then come
               back and press Verify and save again.
             </Callout>
           </Step>
@@ -322,7 +322,7 @@ export default async function WhatsAppGuidePage() {
             </p>
             <p className="text-ink-3">
               While you are using a test number, Meta will only deliver to numbers on this list.
-              This is a Meta restriction, not a cadence one.
+              This is a Meta restriction, not a enori one.
             </p>
           </Step>
 
@@ -360,7 +360,7 @@ export default async function WhatsAppGuidePage() {
           />
         ) : (
           <Empty>
-            Only the account owner can save these. Ask whoever set up your cadence account.
+            Only the account owner can save these. Ask whoever set up your enori account.
           </Empty>
         )}
       </Section>
@@ -419,7 +419,7 @@ export default async function WhatsAppGuidePage() {
             <Step n={2} title="Create a System User">
               <p>
                 In the left menu, under <strong>Users</strong>, click <strong>System users</strong>,
-                then <strong>Add</strong>. Name it something you will recognise later — “cadence”
+                then <strong>Add</strong>. Name it something you will recognise later — “enori”
                 is fine — and set the role to <strong>Admin</strong>.
               </p>
             </Step>

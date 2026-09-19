@@ -4,6 +4,7 @@ import { readTheme } from "@/lib/theme";
 import { signOut } from "@/app/signin/actions";
 import { ThemeCorner } from "@/app/ThemeToggle";
 import { SideNav, type NavSection } from "@/app/SideNav";
+import { Lockup } from "@/app/Wordmark";
 
 /**
  * Admin shell.
@@ -57,24 +58,30 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="flex min-h-screen flex-col bg-paper md:flex-row">
       <aside className="flex shrink-0 flex-col border-b border-rule bg-surface md:sticky md:top-0 md:h-screen md:w-[184px] md:border-b-0 md:border-r">
-        <Link href="/admin" className="flex items-center gap-2 px-3 py-3.5">
-          <span
-            aria-hidden
-            className="grid size-6 shrink-0 place-items-center rounded-md bg-accent-wash font-display text-[13px] font-semibold text-accent"
-          >
-            c
-          </span>
-          <span className="truncate font-display text-[15px] font-semibold tracking-tight text-ink">
-            {user.tenantName}
-          </span>
+        {/* The product's mark, and only the product's mark. The business used to
+            sit here, which docs/logo-reference.md §8 names as the single most
+            expensive mistake available with a white-label product: a customer's
+            name under the mark reads as a lockup, and the next prospect to see
+            it is looking at a competitor's branding inside software they are
+            being asked to buy. Whose data this is now lives in the account area
+            at the foot, under a neutral label, where it answers the question it
+            is actually for. */}
+        <Link href="/admin" className="flex items-center px-3 py-3.5">
+          <Lockup size={22} />
         </Link>
 
         <SideNav sections={NAV} />
 
-        <div className="mt-auto flex flex-col gap-2 border-t border-rule px-3 py-2.5">
-          <span className="truncate text-[11px] text-ink-faint" title={user.email}>
-            {user.email}
-          </span>
+        <div className="mt-auto flex flex-col gap-2 border-t border-rule px-3 py-3">
+          <div className="flex flex-col gap-0.5">
+            <span className="eyebrow">Business</span>
+            <span className="truncate text-[13px] font-medium text-ink" title={user.tenantName}>
+              {user.tenantName}
+            </span>
+            <span className="truncate text-[11px] text-ink-faint" title={user.email}>
+              {user.email}
+            </span>
+          </div>
           <form action={signOut}>
             <button type="submit" className="btn btn-ghost">
               Sign out

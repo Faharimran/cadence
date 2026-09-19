@@ -345,7 +345,7 @@ export async function restoreDoc(formData: FormData): Promise<void> {
 }
 
 /**
- * Points cadence at the business's own website.
+ * Points enori at the business's own website.
  *
  * Validation happens here, before anything is queued, so a mistyped address or a
  * private URL is refused while the person is still looking at the form rather

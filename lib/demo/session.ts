@@ -3,7 +3,7 @@ import { redis } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 
 /**
- * The guard rails on the one endpoint in cadence that anybody can call.
+ * The guard rails on the one endpoint in enori that anybody can call.
  *
  * Everything else that reaches a model sits behind a signed-in session or a
  * verified webhook signature. The demo does not, by design — a sales page that
@@ -92,7 +92,7 @@ export async function consumeDemoBudget(args: {
     }
     return { ok: true };
   } catch (err) {
-    // Fails CLOSED. Everywhere else in cadence a Redis outage costs latency and
+    // Fails CLOSED. Everywhere else in enori a Redis outage costs latency and
     // never correctness — the snapshot layer degrades to a fresh read and
     // carries on. Here the thing Redis is holding is the spending limit itself,
     // so degrading to "allow" would turn an outage into an unmetered public

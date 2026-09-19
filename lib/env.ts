@@ -35,7 +35,7 @@ const schema = z.object({
    * False on a hosted deployment, and that is not a preference: the endpoint a
    * tenant saves is fetched by OUR server, so "http://169.254.169.254/…" is a
    * request to read the cloud provider's instance metadata from inside the
-   * network. True only where cadence runs on the same private network as the
+   * network. True only where enori runs on the same private network as the
    * model — a business hosting its own behind vLLM or Ollama, which is a real
    * deployment and the reason this is a switch rather than a rule.
    */

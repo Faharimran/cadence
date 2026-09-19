@@ -1,7 +1,7 @@
-# cadence
+# enori
 
 Multi-tenant scheduling, availability and conversation infrastructure. Businesses either
-enter their operational data through cadence's own admin UI, or cadence brokers it from
+enter their operational data through enori's own admin UI, or enori brokers it from
 the CRM/ERP they already run. Either way the conversation layer answers and books against
 **live** state, and the business gets an API and webhooks back.
 
@@ -76,7 +76,7 @@ async, and route handlers are uncached by default.
    both, and requires each page to return 200 before trusting a negative assertion.
 
 10. **Whose key answers is data; how to speak to it is code.** A business may run its
-   conversations on its own model credentials (`ModelProvider`) or on cadence's, and no
+   conversations on its own model credentials (`ModelProvider`) or on enori's, and no
    row means ours. The endpoint and the model id are theirs to type; the wire protocol is
    a closed set of two — `anthropic` and `openai` — each with a driver under
    `lib/conversation/drivers/`. Adding DeepSeek or Groq is a row in `VENDORS`; adding a
@@ -86,7 +86,7 @@ async, and route handlers are uncached by default.
    agreed to and a broken integration nobody would notice. Ingestion stays on the platform
    key. `scripts/proveModelProviders.ts` asserts all of it, without calling a model.
 
-## What cadence is not
+## What enori is not
 
 It books **appointments** — something a customer occupies for a duration. Retail and food
 service are a different transaction (an order, with stock and fulfilment) and no preset

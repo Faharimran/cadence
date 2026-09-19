@@ -1,7 +1,7 @@
 /**
  * Executable proof that the public demo is safe to leave unauthenticated.
  *
- * The demo is the only surface in cadence that anybody on the internet can make
+ * The demo is the only surface in enori that anybody on the internet can make
  * spend money and write rows. Three claims are made for it on the page and in
  * the code comments, and all three are the kind a reasonable person should
  * refuse to take on trust:

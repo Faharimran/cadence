@@ -5,7 +5,7 @@ import type { TenantDb } from "@/lib/prisma";
  * What this tenant can actually do, and where the data lives.
  *
  * This is the hinge the whole product turns on. A salon with no CRM runs every
- * capability `hosted` against cadence's own tables; a clinic on an existing PMS
+ * capability `hosted` against enori's own tables; a clinic on an existing PMS
  * runs availability and bookings `brokered` through a connector. Both get the
  * identical engine interface and — critically — the identical agent.
  *
@@ -64,7 +64,7 @@ export async function resolveCapabilities(
 }
 
 /**
- * True when this capability is served by cadence's own tables.
+ * True when this capability is served by enori's own tables.
  *
  * Every tool checks this before writing. Brokered writes must go through the
  * connector so the tenant's system stays the system of record — writing to our

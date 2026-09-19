@@ -120,7 +120,7 @@ export function AgentForm({
   /**
    * Set when this business answers on its own key.
    *
-   * The cards below choose from the models cadence pays for, which is not what
+   * The cards below choose from the models enori pays for, which is not what
    * is running when someone has brought their own — showing them anyway would
    * mean a page that says "Balanced" while every message goes to DeepSeek. The
    * saved values are still submitted, so switching back next month finds the
@@ -178,7 +178,7 @@ If they mention they're coming for a wedding, say congratulations.`}
               .
             </p>
             <p className="mt-2 text-[12px] leading-relaxed text-ink-3">
-              The model and effort you picked for cadence&apos;s key are kept as they are, for if
+              The model and effort you picked for enori&apos;s key are kept as they are, for if
               you switch back.
             </p>
           </div>

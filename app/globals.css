@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════════════════
-   cadence tokens — built to docs/ui-reference.md.
+   enori tokens — built to docs/ui-reference.md.
 
    Five rules run through this file, and everything below follows from them:
 
@@ -221,6 +221,14 @@
     --field-line-1: var(--dk-field-line-1);
     --field-line-2: var(--dk-field-line-2);
     --card-lift: var(--dk-card-lift);
+    --auth-from: var(--dk-auth-from);
+    --auth-mid: var(--dk-auth-mid);
+    --auth-to: var(--dk-auth-to);
+    --auth-glow: var(--dk-auth-glow);
+    --auth-tile: var(--dk-auth-tile);
+    --auth-tile-line: var(--dk-auth-tile-line);
+    --mark-prefix: var(--dk-mark-prefix);
+    --mark-root: var(--dk-mark-root);
     --m-paper: var(--dk-m-paper);
     --m-surface: var(--dk-m-surface);
     --m-surface-2: var(--dk-m-surface-2);
@@ -288,6 +296,14 @@
   --field-line-1: var(--dk-field-line-1);
   --field-line-2: var(--dk-field-line-2);
   --card-lift: var(--dk-card-lift);
+  --auth-from: var(--dk-auth-from);
+  --auth-mid: var(--dk-auth-mid);
+  --auth-to: var(--dk-auth-to);
+  --auth-glow: var(--dk-auth-glow);
+  --auth-tile: var(--dk-auth-tile);
+  --auth-tile-line: var(--dk-auth-tile-line);
+  --mark-prefix: var(--dk-mark-prefix);
+  --mark-root: var(--dk-mark-root);
   --m-paper: var(--dk-m-paper);
   --m-surface: var(--dk-m-surface);
   --m-surface-2: var(--dk-m-surface-2);
@@ -354,6 +370,30 @@
      band rather than sitting in the page. */
   --card-lift: 0 18px 44px -26px rgba(20, 30, 70, 0.35);
 
+  /* The sign-in panel. A brand surface, so unlike the admin it commits to the
+     blue in both themes rather than following the toggle — what changes in dark
+     is how deep it runs, not whether it is blue. White measures 5.65:1 against
+     the middle of this ramp, which is where the words sit. */
+  --auth-from: #2a46c4;
+  --auth-mid: #3358e8;
+  --auth-to: #6b8af0;
+  --auth-glow: rgba(255, 255, 255, 0.28);
+  --auth-tile: rgba(17, 26, 82, 0.3);
+  --auth-tile-line: rgba(255, 255, 255, 0.16);
+
+  /* ── The logotype ──────────────────────────────────────────────────
+     Two tones, and the split IS the mark: an accent prefix on an ink root.
+     They are tokens rather than the accent and ink themselves because the
+     mark has to survive a dark ground on its own terms — docs/logo-reference.md
+     §2 sets the root to white there and lightens the prefix to clear it. */
+  --mark-prefix: #3358e8;
+  --mark-root: #14161d;
+  /* The micro mark's chip does NOT follow the theme's accent: white on the dark
+     accent measures 2.5:1, and a brand chip that fails contrast in half the
+     product is not a brand chip. Fixed at the brand blue, which white clears at
+     5.65:1 on either ground. */
+  --mark-chip: #3358e8;
+
   --m-paper: #f5f6f8;
   --m-surface: #ffffff;
   --m-surface-2: #eef0f4;
@@ -382,6 +422,14 @@
   --dk-field-line-1: rgba(165, 185, 247, 0.13);
   --dk-field-line-2: rgba(165, 185, 247, 0.09);
   --dk-card-lift: 0 24px 60px -20px rgba(3, 20, 40, 0.65);
+  --dk-auth-from: #1b2a72;
+  --dk-auth-mid: #2440b8;
+  --dk-auth-to: #4a6ae0;
+  --dk-auth-glow: rgba(255, 255, 255, 0.16);
+  --dk-auth-tile: rgba(8, 13, 45, 0.42);
+  --dk-auth-tile-line: rgba(255, 255, 255, 0.12);
+  --dk-mark-prefix: #8fb4ff;
+  --dk-mark-root: #ffffff;
   --dk-m-paper: #0f1220;
   --dk-m-surface: #181d31;
   --dk-m-surface-2: #222842;
@@ -773,7 +821,7 @@ table th {
  * The hero ground.
  *
  * The reference this borrows from uses a photograph of sky. A stock photo says
- * nothing about what the product is, so this is built from cadence's own
+ * nothing about what the product is, so this is built from enori's own
  * subject instead: a field of time. The horizontal rules are hours, the
  * vertical ones are days, and the whole grid recedes — the calendar the
  * assistant is answering against, rather than weather.
@@ -864,6 +912,120 @@ table th {
   outline: none;
   border-color: var(--signal);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 22%, transparent);
+}
+
+/* ── The sign-in panel ───────────────────────────────────────────────
+   Two halves of one card: a brand surface saying what is behind the door, and
+   a form. The left half is the only gradient in the product, which is the
+   argument for it being here and nowhere else. */
+.auth-band {
+  background:
+    radial-gradient(120% 90% at 85% 8%, var(--auth-glow) 0%, transparent 55%),
+    linear-gradient(145deg, var(--auth-from) 0%, var(--auth-mid) 52%, var(--auth-to) 100%);
+  color: #fff;
+}
+.auth-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--pill);
+  border: 1px solid var(--auth-tile-line);
+  background: var(--auth-tile);
+  font-size: 12px;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+}
+/* The three claims. The first is filled, the way the reference fills the step
+   you are on — here it is simply the one worth reading first. */
+.auth-tile {
+  border: 1px solid var(--auth-tile-line);
+  background: var(--auth-tile);
+  border-radius: var(--r-sm);
+  padding: 10px;
+  backdrop-filter: blur(8px);
+}
+.auth-tile-lead {
+  background: var(--surface-card);
+  border-color: transparent;
+  color: var(--ink);
+}
+
+/* A button that fills its column — a form's one action, not a toolbar's. */
+.btn-block {
+  width: 100%;
+}
+
+/* ── Comfortable sizes ───────────────────────────────────────────────
+   The scale everything else uses is deliberately tight: it is built for
+   screens that hold a hundred rows, where one more line on screen beats a
+   generous control. A sign-in page holds two fields. At 13px in half a window
+   they read as a form someone shrank by accident, so these are the same
+   controls at the size a page with room for them should use. */
+.input-lg {
+  padding: 11px 14px;
+  font-size: 15px;
+  border-radius: var(--r);
+}
+.btn-lg {
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: 600;
+}
+/* A field label that is read rather than scanned — sentence case at a legible
+   size, not the 10px uppercase eyebrow a dense table needs. */
+.label-lg {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+/* ── The logotype ────────────────────────────────────────────────────
+   docs/logo-reference.md. Lowercase always, two-tone always, no effects ever.
+   `text-transform: none` is not decoration: an uppercase nav or a title-cased
+   heading anywhere near this would capitalise a mark that is never capitalised,
+   and the exemption has to be explicit because the rule that would break it is
+   somewhere else. */
+.enori-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.enori-wordmark {
+  font-family: var(--font-display), Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--mark-root);
+  white-space: nowrap;
+}
+.enori-prefix {
+  color: var(--mark-prefix);
+}
+/* On a coloured ground the two-tone split has nothing to split against — a blue
+   prefix on blue is not a prefix. §2 of the reference allows exactly one
+   fallback for this: the whole word in white. Never the whole word in the
+   accent, which reads as a link. */
+.enori-solid,
+.enori-solid .enori-prefix {
+  color: #fff;
+}
+.enori-mark {
+  display: grid;
+  place-items: center;
+  border-radius: 30%;
+  background: var(--mark-chip);
+  color: #fff;
+  font-family: var(--font-display), Georgia, serif;
+  font-weight: 700;
+  line-height: 1;
+}
+/* Inverted, for the one ground the chip cannot survive: the brand blue itself.
+   A #3358e8 squircle on a #3358e8 band is a square you cannot see. White chip,
+   accent glyph — the same mark, the same weight, and 5.65:1 either way. */
+.enori-mark-solid {
+  background: #fff;
+  color: var(--mark-chip);
 }
 
 /* Motion here is atmosphere, never information — so removing it costs nothing. */

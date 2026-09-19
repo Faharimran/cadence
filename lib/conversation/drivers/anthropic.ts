@@ -12,7 +12,7 @@ import {
 /**
  * The Messages API, via the official SDK.
  *
- * This is the path cadence's own key takes and the one a business takes when it
+ * This is the path enori's own key takes and the one a business takes when it
  * brings an Anthropic key of its own. It keeps two things the generic protocol
  * cannot offer: the SDK's tool runner, which drives the loop, and prompt
  * caching, which is most of the input bill on a prompt this size.
@@ -31,9 +31,9 @@ let platformClient: Anthropic | null = null;
 function clientFor(req: {
   apiKey: string;
   baseUrl: string | null;
-  source: "cadence" | "tenant";
+  source: "platform" | "tenant";
 }): Anthropic {
-  if (req.source === "cadence") {
+  if (req.source === "platform") {
     platformClient ??= new Anthropic({
       apiKey: req.apiKey,
       // Identity-linked keys belong to a person, not a workspace, so the API

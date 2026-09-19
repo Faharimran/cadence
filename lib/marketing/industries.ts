@@ -1,5 +1,5 @@
 /**
- * What cadence does for eight trades, in the words their owners use.
+ * What enori does for eight trades, in the words their owners use.
  *
  * This is the page's answer to "is it for a business like mine", and it is the
  * easiest place on the site to start lying. So two rules govern every line
@@ -66,7 +66,7 @@ export type Industry = {
 /** Said plainly under the tabs. See rule 2 above. */
 export const NOT_FOR =
   "Not on this list: shops, restaurants, delivery. Those are orders — a basket, stock, " +
-  "fulfilment — and cadence doesn't model any of it. Better to say so here than three " +
+  "fulfilment — and enori doesn't model any of it. Better to say so here than three " +
   "weeks into your setup.";
 
 export const INDUSTRIES: Industry[] = [
@@ -103,7 +103,7 @@ export const INDUSTRIES: Industry[] = [
     tab: "Dental",
     headline: "Three surgeries, two hygienists, one diary that is never wrong",
     lede:
-      "A practice this shape is a scheduling problem the phone cannot solve. cadence works the answer out per question, holds the chair and the dentist together, and refuses to quote a price you have not published.",
+      "A practice this shape is a scheduling problem the phone cannot solve. enori works the answer out per question, holds the chair and the dentist together, and refuses to quote a price you have not published.",
     handles: [
       "Check-ups and hygiene visits, with a named dentist or whoever is free",
       "A chair, a surgery and a clinician held as one appointment",
@@ -182,7 +182,7 @@ export const INDUSTRIES: Industry[] = [
     tab: "Insurance",
     headline: "Advisers advising, not arranging appointments",
     lede:
-      "An adviser's hour is the product. cadence takes review and claim appointments off their desk, and says nothing whatsoever about cover, premiums, or whether a claim will pay.",
+      "An adviser's hour is the product. enori takes review and claim appointments off their desk, and says nothing whatsoever about cover, premiums, or whether a claim will pay.",
     handles: [
       "Policy reviews, new cover and claim appointments, booked live",
       "What to bring, how long it takes, and what it costs — as written",
@@ -209,7 +209,7 @@ export const INDUSTRIES: Industry[] = [
     tab: "Automotive",
     headline: "The bay booked, the quote left to you",
     lede:
-      "A garage that quotes a repair over chat has committed to it. cadence books the vehicle into a bay with a technician, and refuses to guess at anything nobody has looked at yet.",
+      "A garage that quotes a repair over chat has committed to it. enori books the vehicle into a bay with a technician, and refuses to guess at anything nobody has looked at yet.",
     handles: [
       "Servicing, inspections and diagnostics booked into a bay with a technician",
       "A bay out of use removed from availability without closing the shop",
@@ -261,7 +261,7 @@ export const INDUSTRIES: Industry[] = [
     tab: "Veterinary",
     headline: "Consults booked. Clinical questions never answered.",
     lede:
-      "Owners message about an animal at ten at night, and the single worst thing an assistant can do is reassure them. cadence books the consult and hands everything else to a vet.",
+      "Owners message about an animal at ten at night, and the single worst thing an assistant can do is reassure them. enori books the consult and hands everything else to a vet.",
     handles: [
       "Consults and follow-ups booked with a named vet",
       "A consult room held alongside the vet",

@@ -4,6 +4,7 @@ import { readTheme } from "@/lib/theme";
 import { ThemeToggle } from "@/app/ThemeToggle";
 import { SideNav, type NavSection } from "@/app/SideNav";
 import { Icon } from "@/app/icons";
+import { Lockup } from "@/app/Wordmark";
 import { platformSignOut } from "./actions";
 
 /**
@@ -43,14 +44,9 @@ export default async function PlatformLayout({ children }: { children: React.Rea
     <div className="flex min-h-screen flex-col bg-paper md:flex-row">
       <aside className="flex shrink-0 flex-col border-b border-rule bg-surface md:sticky md:top-0 md:h-screen md:w-[184px] md:border-b-0 md:border-r">
         <Link href="/platform" className="flex items-center gap-2 px-3 py-3.5">
-          <span
-            aria-hidden
-            className="grid size-6 shrink-0 place-items-center rounded-md bg-ink font-display text-[13px] font-semibold text-surface"
-          >
-            c
-          </span>
-          <span className="min-w-0 font-display text-[15px] font-semibold tracking-tight text-ink">
-            cadence <span className="text-ink-faint">/ console</span>
+          <Lockup size={20} />
+          <span className="font-display text-[15px] font-semibold tracking-tight text-ink-faint">
+            / console
           </span>
         </Link>
 

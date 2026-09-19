@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { currentOperator } from "@/lib/platform/guard";
 import { readTheme } from "@/lib/theme";
 import { ThemeCorner } from "@/app/ThemeToggle";
+import { Lockup } from "@/app/Wordmark";
 import { platformSignIn } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -29,9 +30,10 @@ export default async function PlatformSignIn({
       <ThemeCorner initial={theme} />
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col gap-1">
-          <span className="eyebrow">
-            cadence · operators
-          </span>
+          <div className="flex items-center gap-2">
+            <Lockup size={22} />
+            <span className="eyebrow">· operators</span>
+          </div>
           <h1 className="num text-[22px] font-semibold">Console</h1>
           <p className="mt-2 text-sm text-ink-2">
             For the people who run cadence. If you run a business on it,{" "}

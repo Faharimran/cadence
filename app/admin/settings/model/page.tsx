@@ -58,7 +58,7 @@ export default async function ModelKeyPage() {
         <BackLink href="/admin/settings">settings</BackLink>
         <PageHeader
           title="Which API key answers"
-          lede="By default your customers are answered on cadence's key and you never think about it. If you already pay a model provider — Claude, DeepSeek, OpenAI, or your own server — you can put that key in here instead, and the usage goes to that account."
+          lede="By default your customers are answered on enori's key and you never think about it. If you already pay a model provider — Claude, DeepSeek, OpenAI, or your own server — you can put that key in here instead, and the usage goes to that account."
         />
         <div className="flex flex-wrap items-center gap-2">
           {failing ? (
@@ -66,7 +66,7 @@ export default async function ModelKeyPage() {
           ) : onOwnKey ? (
             <Pill tone="ok" exact>your own {provider?.vendorLabel} key</Pill>
           ) : (
-            <Pill>cadence&apos;s key</Pill>
+            <Pill>enori&apos;s key</Pill>
           )}
           {onOwnKey && provider && (
             <span className="num text-[11px] text-ink-faint">
@@ -89,7 +89,7 @@ export default async function ModelKeyPage() {
             {provider.lastFailureAt &&
               `Last failed ${describeInstant(provider.lastFailureAt, tenant.timezone)}. `}
             Until this is fixed, any customer who messages is answered by a person from your inbox
-            rather than by the assistant. Fix the key below, or switch back to cadence&apos;s — the
+            rather than by the assistant. Fix the key below, or switch back to enori&apos;s — the
             assistant picks up again on the next message either way.
           </p>
         </Notice>
@@ -144,7 +144,7 @@ export default async function ModelKeyPage() {
         <div className="flex max-w-[75ch] flex-col gap-4 text-sm leading-relaxed text-ink-2">
           <p>
             <strong className="text-ink">Your key answers customers; ours still reads documents.</strong>{" "}
-            Turning an uploaded file into articles runs on cadence&apos;s key and is included in what
+            Turning an uploaded file into articles runs on enori&apos;s key and is included in what
             you pay us. It is a handful of requests when you upload something, against thousands a
             month for conversations — and it uses a feature not every provider implements the same
             way.

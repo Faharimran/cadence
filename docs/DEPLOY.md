@@ -1,4 +1,4 @@
-# Deploying cadence to Railway
+# Deploying enori to Railway
 
 About an hour, once. After it, the WhatsApp webhook address stops changing —
 which is the reason for doing it. Every failure during local testing traced back
@@ -42,7 +42,7 @@ than pasting.
 
 Every tenant-scoped table is protected by row-level security. Postgres exempts a
 table's **owner** from its own policies — so an application connected as the
-owner has isolation that appears configured and does nothing. cadence therefore
+owner has isolation that appears configured and does nothing. enori therefore
 uses two connections: the owner for migrations, and a restricted role for
 everything the app does. `lib/env.ts` refuses to boot in production unless the
 two differ.

@@ -8,6 +8,7 @@ import { isAgentConfigured } from "@/lib/conversation/agent";
 import { readTheme, type Theme } from "@/lib/theme";
 import { ThemeToggle } from "./ThemeToggle";
 import { Icon } from "./icons";
+import { Lockup } from "./Wordmark";
 import DemoChat from "./DemoChat";
 import Industries from "./Industries";
 import ApprovalToy from "./ApprovalToy";
@@ -17,7 +18,7 @@ import AvailabilityLab from "./AvailabilityLab";
  * The public page.
  *
  * Everything stated here is true and checkable in this repository. There are no
- * client logos, no star rating and no testimonial, because cadence has no
+ * client logos, no star rating and no testimonial, because enori has no
  * customers yet and inventing them is the one thing a page selling *approval*
  * cannot do. What replaces them is the engineering — a business buying an
  * assistant that speaks to its customers has a reasonable interest in whether
@@ -168,7 +169,7 @@ function Hero({ signedIn, theme }: { signedIn: boolean; theme: Theme }) {
           </h1>
 
           <p className="mt-6 max-w-xl text-[15px] leading-relaxed text-on-deep-2">
-            cadence replies to your customers on WhatsApp, books into your real calendar, and hands
+            enori replies to your customers on WhatsApp, books into your real calendar, and hands
             over anything you haven&apos;t approved it to say.
           </p>
 
@@ -208,17 +209,11 @@ function Hero({ signedIn, theme }: { signedIn: boolean; theme: Theme }) {
 function Nav({ signedIn, theme }: { signedIn: boolean; theme: Theme }) {
   return (
     <nav className="band-panel flex items-center gap-4 rounded-full px-5 py-2.5">
-      <Link href="/" className="flex items-center gap-2">
-        <span
-          aria-hidden
-          className="grid size-6 place-items-center rounded-md text-[11px] font-bold"
-          style={{ background: "var(--spark)", color: "var(--spark-ink)" }}
-        >
-          c
-        </span>
-        <span className="font-display text-[15px] font-semibold tracking-tight text-on-deep">
-          cadence
-        </span>
+      <Link href="/" aria-label="enori">
+        {/* Not the solid tone: this band is pale in light and navy in dark, and
+            the mark's own tokens already flip with it. Forcing white here put a
+            white wordmark on a pale blue band. */}
+        <Lockup size={22} />
       </Link>
 
       <div className="ml-auto hidden items-center gap-7 sm:flex">
@@ -365,7 +360,7 @@ function SlotsCard() {
 // ══════════════════════════════════════════════════════════════════════
 
 /**
- * The reference puts a row of client logos here. cadence has no clients to show
+ * The reference puts a row of client logos here. enori has no clients to show
  * and borrowed logos are a lie, so this does the same job — establishing
  * breadth — with something true: the trades the model actually fits.
  */
@@ -533,7 +528,7 @@ function Availability() {
             A calendar that can&apos;t be wrong
           </h2>
           <p className="mt-6 text-[15px] leading-relaxed text-m-ink-2">
-            An assistant is only as good as the availability behind it. cadence never stores whether
+            An assistant is only as good as the availability behind it. enori never stores whether
             a slot is free — it works the answer out per question, from your hours, your leave and
             your bookings. Switch a layer below and watch the day change.
           </p>
@@ -685,14 +680,7 @@ function Foot() {
     <footer className="border-t border-m-rule bg-m-paper py-10">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 sm:flex-row">
         <div className="flex items-center gap-2">
-          <span
-            aria-hidden
-            className="grid size-5 place-items-center rounded text-[10px] font-bold"
-            style={{ background: "var(--signal)", color: "#fff" }}
-          >
-            c
-          </span>
-          <span className="font-display text-[14px] font-semibold tracking-tight">cadence</span>
+          <Lockup size={18} />
         </div>
         <p className="text-[12px] text-m-ink-3">
           Scheduling, availability and conversation infrastructure.

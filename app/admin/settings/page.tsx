@@ -77,7 +77,7 @@ export default async function SettingsPage() {
           ) : provider?.active ? (
             <Pill tone="ok">your own {provider.vendorLabel} key</Pill>
           ) : (
-            <Pill>cadence&apos;s key</Pill>
+            <Pill>enori&apos;s key</Pill>
           )}
           {provider?.active && (
             <span className="num text-xs text-ink-2">{provider.model}</span>

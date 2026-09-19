@@ -1,8 +1,8 @@
-# cadence
+# enori
 
 Multi-tenant scheduling, availability and conversation infrastructure.
 
-A business either enters its operational data through cadence's admin UI, or cadence
+A business either enters its operational data through enori's admin UI, or enori
 brokers that data from the CRM/ERP they already run. Either way the conversation layer
 answers and books against **live** state — a real free slot, a real person on leave, a
 real promotion running today — and the business gets a REST API and webhooks back.
@@ -38,7 +38,7 @@ Needs Postgres 16+ and Redis. The bundled `docker-compose.yml` provides both on
 npm install
 cp .env.example .env.local        # then edit
 
-createdb cadence
+createdb enori
 psql "$DATABASE_URL" -c "CREATE ROLE cadence_app LOGIN PASSWORD 'cadence_app'"
 psql "$DATABASE_URL" -c "GRANT USAGE ON SCHEMA public TO cadence_app"
 

@@ -4,7 +4,7 @@
  * Two jobs, both duller and more failure-prone than they look: turning whatever
  * URL a person pasted into something fetchable, and parsing CSV properly.
  *
- * On authentication — cadence reads sheets one of two ways, and neither is
+ * On authentication — enori reads sheets one of two ways, and neither is
  * OAuth:
  *
  *   · a sheet shared as "anyone with the link can view", which Google will

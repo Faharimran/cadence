@@ -53,7 +53,7 @@ export default async function IntegrationPage() {
           is nothing for them to do, and leave. */}
       <section className="rounded-lg border border-rule bg-surface p-5">
         <p className="max-w-[66ch] text-sm text-ink-2">
-          If you keep your bookings, customers and staff here in cadence, everything is already
+          If you keep your bookings, customers and staff here in enori, everything is already
           connected and there is nothing on this page to set up.
         </p>
         <p className="mt-3 max-w-[66ch] text-sm text-ink-2">
@@ -71,7 +71,7 @@ export default async function IntegrationPage() {
       <Section title="Already have this in a spreadsheet?" boxed>
         <p className="max-w-[68ch] text-sm text-ink-2">
           If your services and prices live in a Google Sheet — or in Zoho, Zenoti, Fresha or a till
-          system that can export one — point cadence at it instead of retyping. It reads the sheet,
+          system that can export one — point enori at it instead of retyping. It reads the sheet,
           works out which column is which, and keeps following it, so the copy you already edit
           stays the real one.
         </p>
@@ -220,7 +220,7 @@ export default async function IntegrationPage() {
       <Section title="Where each thing lives">
         <p className="max-w-[68ch] text-sm text-ink-2">
           Set per capability, not per business. Keep customers in the CRM you already run while
-          cadence handles the calendar — the assistant works identically either way, and simply
+          enori handles the calendar — the assistant works identically either way, and simply
           loses the tools for anything you have not enabled.
         </p>
         <ul className="flex flex-col gap-2">
@@ -233,7 +233,7 @@ export default async function IntegrationPage() {
                 {!current && <Pill tone="warn">not enabled</Pill>}
                 {current && (
                   <Pill tone={current.mode === "hosted" ? "ok" : undefined}>
-                    {current.mode === "hosted" ? "in cadence" : `via ${current.connector ?? "connector"}`}
+                    {current.mode === "hosted" ? "in enori" : `via ${current.connector ?? "connector"}`}
                   </Pill>
                 )}
                 {isOwner && (
@@ -244,7 +244,7 @@ export default async function IntegrationPage() {
                       defaultValue={current?.mode ?? "hosted"}
                       className={`${inputClass} py-1 text-xs`}
                     >
-                      <option value="hosted">in cadence</option>
+                      <option value="hosted">in enori</option>
                       <option value="brokered">in our system</option>
                     </select>
                     <input

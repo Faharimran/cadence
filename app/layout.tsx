@@ -29,9 +29,9 @@ const display = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "cadence — an assistant that only says what you approved",
+  title: "enori — an assistant that only says what you approved",
   description:
-    "cadence answers your customers on WhatsApp, books into your real calendar, and hands over anything you have not approved it to say.",
+    "enori answers your customers on WhatsApp, books into your real calendar, and hands over anything you have not approved it to say.",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,5 +1,5 @@
 /**
- * Writing a sheet into cadence, and being able to take it back.
+ * Writing a sheet into enori, and being able to take it back.
  *
  * Imports here apply immediately — no preview, no approval queue. That is a
  * deliberate choice and it is only defensible because of the second half: every

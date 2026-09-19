@@ -6,7 +6,7 @@ import type { Capability, ExceptionEffect } from "@prisma/client";
  * A preset writes ordinary rows — exception types, tags, a tone note, a draft
  * article — and then has no further existence. Nothing in the engine, the agent
  * or the API ever reads `Tenant.vertical`, and nothing may start: the moment
- * behaviour branches on which preset was chosen, cadence owns a vertical again
+ * behaviour branches on which preset was chosen, enori owns a vertical again
  * and every new industry becomes a code change.
  *
  * What they are actually for is the empty state. A business that signs up and
@@ -14,7 +14,7 @@ import type { Capability, ExceptionEffect } from "@prisma/client";
  * already in place ("Chair", "Day off", "Do you take walk-ins?") finishes it.
  *
  * Every preset here is an APPOINTMENT business — something a customer occupies
- * for a duration. That is the shape cadence models. A shop selling ice cream
+ * for a duration. That is the shape enori models. A shop selling ice cream
  * over a counter is a different transaction entirely (an order, not a booking)
  * and no preset can bridge that; it needs an engine this product does not yet
  * have. Better a short honest list than one that mis-sells.

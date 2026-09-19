@@ -8,7 +8,7 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 
 /**
- * Encryption at rest for the handful of secrets cadence stores on a tenant's
+ * Encryption at rest for the handful of secrets enori stores on a tenant's
  * behalf: WhatsApp tokens, Meta app secrets, webhook signing keys.
  *
  * These are different in kind from API keys. An API key we only ever *verify*,

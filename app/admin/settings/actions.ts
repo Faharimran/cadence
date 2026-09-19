@@ -411,21 +411,21 @@ export async function testWhatsAppConnection(): Promise<SettingsFormState> {
 }
 
 /**
- * Which API key answers customers: cadence's, or the business's own.
+ * Which API key answers customers: enori's, or the business's own.
  *
  * Owner-only, like the WhatsApp credentials and for the same two reasons — it is
  * a secret, and it spends money. A manager can change how the assistant sounds;
  * whose account pays for it is the owner's decision.
  *
  * Two shapes in one action, because they are one choice on one form. Choosing
- * cadence's key does NOT delete what was saved: it sets `active` false, so
+ * enori's key does NOT delete what was saved: it sets `active` false, so
  * switching back next week does not mean finding the key again. A key that is
  * genuinely finished with is removed by the button that says so.
  */
 const SaveProvider = z.object({
-  source: z.enum(["cadence", "own"]),
+  source: z.enum(["platform", "own"]),
   // Everything below defaults to empty rather than being required, because the
-  // form legitimately submits without them: choosing cadence's key renders no
+  // form legitimately submits without them: choosing enori's key renders no
   // fields at all, and a preset vendor supplies its own address.
   vendor: z.string().max(40).default(""),
   baseUrl: z.string().max(400).default(""),
@@ -457,15 +457,15 @@ export async function saveModelProvider(
   return asTenant(user, async (db) => {
     const existing = await db.modelProvider.findFirst({ where: { tenantId: user.tenantId } });
 
-    // ── Back to cadence's key ────────────────────────────────────────
-    if (input.source === "cadence") {
+    // ── Back to enori's key ────────────────────────────────────────
+    if (input.source === "platform") {
       if (existing?.active) {
         await db.modelProvider.update({ where: { id: existing.id }, data: { active: false } });
         await audit(db, user, "tenant.model_provider_disabled", { vendor: existing.vendor });
       }
       revalidatePath("/admin/settings/model");
       revalidatePath("/admin/settings/agent");
-      return { ok: "Answers now run on cadence's key. Your own is kept, not deleted." };
+      return { ok: "Answers now run on enori's key. Your own is kept, not deleted." };
     }
 
     // ── Their own key ────────────────────────────────────────────────
@@ -597,7 +597,7 @@ export async function testModelProvider(): Promise<SettingsFormState> {
   });
 }
 
-/** Deletes the saved key. The business goes back to cadence's on the next message. */
+/** Deletes the saved key. The business goes back to enori's on the next message. */
 export async function forgetModelProvider(): Promise<SettingsFormState> {
   const user = await requireRole("owner");
 
@@ -608,7 +608,7 @@ export async function forgetModelProvider(): Promise<SettingsFormState> {
     await audit(db, user, "tenant.model_provider_removed", {});
     revalidatePath("/admin/settings/model");
     revalidatePath("/admin/settings/agent");
-    return { ok: "Removed. Customers are answered on cadence's key again." };
+    return { ok: "Removed. Customers are answered on enori's key again." };
   });
 }
 

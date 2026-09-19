@@ -12,7 +12,7 @@ import {
 } from "@/lib/engine/time";
 
 /**
- * THE availability computation. Nothing in cadence stores whether a slot is
+ * THE availability computation. Nothing in enori stores whether a slot is
  * free; this function derives it, every time, from three layers of facts:
  *
  *   Layer 1  ScheduleRule       the recurring pattern      (generates windows)

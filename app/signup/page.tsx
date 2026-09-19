@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth/guard";
 import { readTheme } from "@/lib/theme";
 import { ThemeCorner } from "@/app/ThemeToggle";
+import { Lockup } from "@/app/Wordmark";
 import { env } from "@/lib/env";
 import { PRESETS } from "@/lib/presets";
 import { SignUpForm } from "./SignUpForm";
@@ -20,9 +21,7 @@ export default async function SignUpPage() {
     <main className="mx-auto w-full max-w-lg px-6 py-16">
       <ThemeCorner initial={theme} />
       <div className="mb-8 flex flex-col gap-1">
-        <span className="eyebrow">
-          cadence
-        </span>
+        <Lockup size={22} />
         <h1 className="num text-[22px] font-semibold">Set up your business</h1>
         <p className="mt-2 text-sm text-ink-2">
           Takes a minute. You&apos;ll land on a checklist that walks you through the rest.

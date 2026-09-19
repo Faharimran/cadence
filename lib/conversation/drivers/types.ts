@@ -12,7 +12,7 @@ import type { Protocol } from "@/lib/conversation/providers";
  * what they refuse to do, what is in the prompt) is decided before a driver is
  * called and is identical whichever one runs.
  *
- * Which means a business on DeepSeek gets the same guarantees as one on cadence's
+ * Which means a business on DeepSeek gets the same guarantees as one on enori's
  * Claude key: the same closed toolset, the same approved knowledge, the same
  * refusal to quote a price no tool returned. The model changes; the walls do not.
  */
@@ -54,7 +54,7 @@ export type TurnRequest = {
   apiKey: string;
   baseUrl: string | null;
   /** Whose key this is. Only the platform's carries our workspace header. */
-  source: "cadence" | "tenant";
+  source: "platform" | "tenant";
   /** Names the provider in any error a person will read. */
   vendorLabel: string;
 };

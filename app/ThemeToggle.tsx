@@ -78,7 +78,7 @@ export function ThemeToggle({ initial }: { initial: Theme }) {
  *
  * Sign-in, sign-up and the operator sign-in are single centred cards. Someone
  * who set the landing page light and then clicks "Sign in" should not land on a
- * surface that has forgotten — and if their first encounter with cadence IS the
+ * surface that has forgotten — and if their first encounter with enori IS the
  * sign-in page, the choice should be available there too.
  */
 export function ThemeCorner({ initial }: { initial: Theme }) {

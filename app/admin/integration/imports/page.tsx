@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  * The premise: a salon that has priced its services in the same spreadsheet for
  * six years is not going to retype it here and then maintain two copies. One of
  * the two becomes the real one and it will not be ours. So the sheet stays
- * theirs and cadence follows it.
+ * theirs and enori follows it.
  *
  * Nothing on this page is Google-specific except the sharing instructions. The
  * pipeline takes rows and columns, so an export from Zoho, Zenoti, Fresha or a
@@ -46,7 +46,7 @@ export default async function ImportsPage() {
         <BackLink href="/admin/integration">connecting other software</BackLink>
         <PageHeader
           title="Bring in what you already have"
-          lede="Point cadence at the spreadsheet you already keep. It reads it, and re-reads it every fifteen minutes, so the sheet stays the copy you edit."
+          lede="Point enori at the spreadsheet you already keep. It reads it, and re-reads it every fifteen minutes, so the sheet stays the copy you edit."
         />
       </div>
 
