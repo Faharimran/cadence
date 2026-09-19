@@ -1,4 +1,4 @@
-// cadence — multi-tenant scheduling, availability and conversation infrastructure.
+// enori — multi-tenant scheduling, availability and conversation infrastructure.
 //
 // Two conventions run through this whole file:
 //
@@ -124,6 +124,7 @@ model Tenant {
   knowledgeSources KnowledgeSource[]
   sheetLinks       SheetLink[]
   importRuns       ImportRun[]
+  modelUsage       ModelUsage[]
 
   @@index([status])
 }
@@ -137,7 +138,7 @@ model Tenant {
 /// A tenant's own model credentials — bring your own key.
 ///
 /// One row per tenant, and its absence is the point: no row, or `active` false,
-/// means conversations run on cadence's platform key. That is what every
+/// means conversations run on enori's platform key. That is what every
 /// business gets until it decides otherwise, and switching back is a boolean
 /// rather than a deletion, so nobody has to paste a key twice.
 model ModelProvider {
@@ -166,7 +167,7 @@ model ModelProvider {
   /// be hashed — we have to spend it, not verify it.
   apiKey String
 
-  /// Free text, deliberately. The models a tenant may pick on cadence's key are
+  /// Free text, deliberately. The models a tenant may pick on enori's key are
   /// a closed list because we pay for them; on their own key the catalogue is
   /// theirs, and it changes faster than we would ship a list.
   model String
@@ -188,6 +189,81 @@ model ModelProvider {
   updatedAt DateTime @updatedAt
 }
 
+/// What a tenant actually spent on a model, per call.
+///
+/// This table exists because the numbers were already being measured and then
+/// thrown away: every driver counts tokens, `runAgentTurn` returns them, and the
+/// worker wrote them into a log line. That is enough to grep one turn and no use
+/// at all for answering "which business is costing us money", which is a
+/// question the operator console has to be able to answer without an engineer.
+///
+/// Four decisions worth knowing about:
+///
+///  1. **One row per model call, not per day.** Rollups are a `groupBy` away and
+///     a bucket is not un-bucketable. A daily counter would make "which model"
+///     and "which conversation" unanswerable the moment anyone asked.
+///
+///  2. **`cacheRead` and `cacheWrite` are separate columns, not folded into
+///     `input`.** The API bills all three differently and excludes cached tokens
+///     from the input count. Summing them into one number would price a cached
+///     prompt at ten times what it cost and make the prompt-caching split — the
+///     single largest lever on this bill — invisible.
+///
+///  3. **Cost is stored, not derived at read time.** Priced from the table in
+///     lib/conversation/pricing.ts at the moment of the call, in USD micros.
+///     Re-pricing last quarter under this quarter's rate card produces a number
+///     that never appeared on any invoice; whatever we believed it cost then is
+///     the honest thing to keep.
+///
+///  4. **Null `costMicros` means a tenant's own key.** We do not pay for those
+///     calls and do not know their rate card — DeepSeek, a Groq account, a model
+///     they run themselves. Tokens are still counted, because volume is ours to
+///     care about; money is theirs. Printing a dollar figure against their key
+///     would be inventing one.
+model ModelUsage {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// conversation | ingestion. Ingestion always runs on the platform key —
+  /// see lib/knowledge/ingest.ts — so a tenant can spend our money without ever
+  /// having sent a message, which is invisible if only turns are counted.
+  kind String
+
+  /// platform | tenant. Whose bill this landed on, and the only thing that
+  /// decides whether `costMicros` is populated.
+  source String
+
+  protocol String
+  /// Presentation and provenance only, exactly as on ModelProvider. Nothing
+  /// branches on it.
+  vendor   String
+  model    String
+
+  inputTokens      Int @default(0)
+  outputTokens     Int @default(0)
+  cacheReadTokens  Int @default(0)
+  cacheWriteTokens Int @default(0)
+
+  /// API calls this record covers. The cost driver nobody looks at: each tool
+  /// call is another full request carrying the whole prompt again.
+  roundTrips Int @default(0)
+
+  /// Millionths of a USD, integer — the same "never let a float touch money"
+  /// rule the rest of the schema follows. Cents would round a single turn to
+  /// zero, which is how a per-turn ledger ends up summing to nothing.
+  costMicros Int?
+
+  /// Nullable, and not a relation: ingestion has no conversation, and a
+  /// conversation deleted later should not take its bill with it.
+  conversationId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([tenantId, createdAt])
+  @@index([createdAt])
+}
+
 model User {
   id       String @id @default(cuid())
   tenantId String
@@ -207,7 +283,7 @@ model User {
   @@index([tenantId, active])
 }
 
-/// Someone who runs cadence itself, rather than a business on it.
+/// Someone who runs enori itself, rather than a business on it.
 ///
 /// A separate table from `User`, not a flag on it, and the reason is structural:
 /// every `User` belongs to a tenant, and a platform operator belongs to none.
@@ -321,7 +397,7 @@ enum Capability {
 }
 
 enum CapabilityMode {
-  hosted // cadence's own tables are the system of record
+  hosted // enori's own tables are the system of record
   brokered // the tenant's system is the system of record; we read/write through
 }
 
@@ -498,7 +574,7 @@ model ScheduleRule {
   startTime String // "10:00"
   endTime   String // "14:00"
 
-  /// Granularity of the offered grid. Slots are generated on this cadence; a
+  /// Granularity of the offered grid. Slots are generated on this enori; a
   /// service longer than one slot simply occupies several.
   slotMinutes Int @default(30)
 
@@ -945,7 +1021,7 @@ model ConversationMessage {
 /// This is where a vertical actually lives. The schema cannot tell a barber from
 /// a clinic — both book a person into a chair for a duration — but their answers
 /// to "what should I expect?" have nothing in common. Rather than modelling
-/// hair-transplant aftercare or fade types, cadence models *the business having
+/// hair-transplant aftercare or fade types, enori models *the business having
 /// written something down*, and the difference between verticals becomes rows.
 ///
 /// Three rules, in descending order of how much trouble they save:
@@ -1211,12 +1287,12 @@ model AuditLog {
 // ══════════════════════════════════════════════════════════════════════
 
 /**
- * A spreadsheet the business keeps, which cadence re-reads on a schedule.
+ * A spreadsheet the business keeps, which enori re-reads on a schedule.
  * The premise is that the sheet stays THEIRS. A salon that has priced its
  * services in the same spreadsheet for six years is not going to retype it here
  * and then maintain two copies; whichever copy is easier to edit becomes the
  * real one, and it will not be ours. So the sheet remains the source of truth
- * and cadence follows it.
+ * and enori follows it.
  * Nothing here is Google-specific except how the URL is resolved. Any source
  * that can produce rows and columns — an Excel export, a Zoho or Zenoti CSV —
  * lands in the same pipeline, which is the point: businesses arrive from

@@ -13,6 +13,7 @@ import {
 } from "@/lib/queue";
 import { ingestSource, ingestWebSource, takeUpload } from "@/lib/knowledge/ingest";
 import { runAgentTurn, isAgentConfigured } from "@/lib/conversation/agent";
+import { recordModelUsage } from "@/lib/conversation/usage";
 import { syncLink } from "@/lib/imports";
 import { expireStaleHolds } from "@/lib/engine/booking";
 import { sendText, splitForDelivery } from "@/lib/channels/whatsapp";
@@ -56,6 +57,30 @@ const agentWorker = new Worker<AgentTurnJob>(
       // is nowhere near enough.
       { timeoutMs: 180_000 },
     );
+
+    // Written outside the turn's transaction, and deliberately.
+    //
+    // The tokens were spent on the model's server; whether our transaction went
+    // on to commit has no bearing on that. Recording inside it would roll the
+    // bill back alongside the booking and leave a spend nobody can see. The
+    // known gap at the other end is a turn that *throws* — its tokens never
+    // reach this line, so the ledger undercounts failures rather than
+    // inventing them.
+    if (turn.usage && turn.provider) {
+      await withTenant(tenantId, (db) =>
+        recordModelUsage(db, {
+          tenantId,
+          kind: "conversation",
+          source: turn.provider!.source,
+          protocol: turn.provider!.protocol,
+          vendor: turn.provider!.vendor,
+          model: turn.provider!.model,
+          tokens: turn.usage!,
+          roundTrips: turn.roundTrips ?? 0,
+          conversationId,
+        }),
+      );
+    }
 
     if (!turn.reply) return { skipped: "no reply produced" };
 

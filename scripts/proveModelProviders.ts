@@ -6,7 +6,7 @@
  * why they are asserted rather than trusted:
  *
  *  1. **The default is ours, and an inactive key stays out of the way.** A
- *     business that never opens the page is answered on cadence's key, and one
+ *     business that never opens the page is answered on enori's key, and one
  *     that switched back is too — with their key still saved, not deleted.
  *
  *  2. **A key is encrypted at rest and never comes back out.** The column holds
@@ -22,7 +22,7 @@
  *  4. **A failing key never quietly spends ours.** The rule is one function, and
  *     every combination is checked, including the one that must never happen.
  *
- * Also asserted: an address that would point cadence's own server at a private
+ * Also asserted: an address that would point enori's own server at a private
  * network is refused, and the operator console cannot read a tenant's key.
  *
  * Run: npm run prove:providers
@@ -81,7 +81,7 @@ async function proveResolution(tenantId: string) {
   await clearProvider(tenantId);
   await withTenant(tenantId, async (db) => {
     const p = await resolveProvider(db, tenantId, tenant);
-    check("no key saved → cadence's", p.source === "cadence", p.source);
+    check("no key saved → enori's", p.source === "platform", p.source);
     check("on the Messages API", p.protocol === "anthropic");
     check("with the model the tenant chose", p.model === expected.model, p.model);
   });
@@ -100,7 +100,7 @@ async function proveResolution(tenantId: string) {
   });
   await withTenant(tenantId, async (db) => {
     const p = await resolveProvider(db, tenantId, tenant);
-    check("a saved-but-inactive key is not used", p.source === "cadence", p.source);
+    check("a saved-but-inactive key is not used", p.source === "platform", p.source);
     const summary = await getProviderSummary(db, tenantId);
     check("and the page still shows it as saved", summary?.active === false && summary.model === "deepseek-chat");
   });
@@ -108,7 +108,7 @@ async function proveResolution(tenantId: string) {
   await adminDb.modelProvider.updateMany({ where: { tenantId }, data: { active: true } });
   await withTenant(tenantId, async (db) => {
     const p = await resolveProvider(db, tenantId, tenant);
-    check("an active key wins over cadence's", p.source === "tenant", p.source);
+    check("an active key wins over enori's", p.source === "tenant", p.source);
     check("on the protocol it was saved with", p.protocol === "openai", p.protocol);
     check("at the address it was saved with", p.baseUrl === "https://api.deepseek.com/v1");
     check("running the model it was saved with", p.model === "deepseek-chat", p.model);
@@ -141,7 +141,7 @@ async function proveResolution(tenantId: string) {
 
   // The claim that matters most: ANTHROPIC_API_KEY is set in this process, and
   // it still does not get used. There is no fallback path to find.
-  check("cadence's key is present in this environment", Boolean(process.env.ANTHROPIC_API_KEY));
+  check("enori's key is present in this environment", Boolean(process.env.ANTHROPIC_API_KEY));
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -164,14 +164,37 @@ async function proveSecrecy(tenantId: string) {
 
   // Rule 9: the operator console reads across tenants on the owner connection,
   // where row-level security does not apply. A stored secret must not be
-  // reachable from there, and the cheapest durable guarantee is that the file
-  // never asks for one.
+  // reachable from there.
   //
-  // Read as source rather than exercised, because the assertion is about what
-  // the console CANNOT do. Calling it and finding no key proves only that this
-  // tenant had none in this test.
+  // This used to be enforced as "metrics.ts never mentions modelProvider at
+  // all", which was the cheapest durable guarantee right up until the console
+  // had to answer a question it cannot answer any other way: whose key is this
+  // business on, and has it stopped working? That is operational fact, not
+  // credential — and refusing to load the row meant an operator learned a
+  // tenant's key had died from the tenant.
+  //
+  // So the guarantee is narrowed rather than dropped, to the two things that
+  // would actually turn a console into a key vault:
+  //
+  //   1. it never SELECTS the ciphertext, so the secret never enters the
+  //      process at all — not even to derive a hint from;
+  //   2. it never calls `decrypt`, which is the only thing that could turn that
+  //      ciphertext back into a usable key.
+  //
+  // Still read as source rather than exercised, for the original reason: the
+  // assertion is about what the console CANNOT do, and calling it against one
+  // tenant proves only that this tenant leaked nothing today. The live
+  // counterpart — a real key seeded and every rendered page searched for it —
+  // is in scripts/provePlatform.ts.
   const metrics = readFileSync("lib/platform/metrics.ts", "utf8");
-  check("the operator console never reads the provider table", !/modelProvider/i.test(metrics));
+  check(
+    "the operator console never selects the stored key",
+    !/apiKey\s*:\s*true/.test(metrics),
+  );
+  check(
+    "and cannot decrypt one if it had it",
+    !/\bdecrypt\b/.test(metrics),
+  );
 
   // The other half of "never comes back out": the form that takes the key must
   // not render it again. A password input with a `value` would put the
@@ -422,8 +445,8 @@ async function proveFailure() {
   check("a tenant's rate limit is simply retried", failureResponse("tenant", "transient") === "retry");
   check(
     "OUR outage never pauses a tenant's threads",
-    failureResponse("cadence", "credential") === "retry" &&
-      failureResponse("cadence", "transient") === "retry",
+    failureResponse("platform", "credential") === "retry" &&
+      failureResponse("platform", "transient") === "retry",
   );
 
   // End to end, through the driver: a rejected key throws the classified

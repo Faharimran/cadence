@@ -1,4 +1,6 @@
 import { adminDb } from "@/lib/prisma";
+import { findVendor } from "@/lib/conversation/providers";
+import { rateFor } from "@/lib/conversation/pricing";
 
 /**
  * What the operator console is allowed to know.
@@ -11,15 +13,25 @@ import { adminDb } from "@/lib/prisma";
  *   **Counts and health. Never a customer.**
  *
  * No query below selects `Customer.name`, `Customer.phone`, `Customer.email`, or
- * `ConversationMessage.body`. Running cadence means knowing that Cara Clinic had
+ * `ConversationMessage.body`. Running enori means knowing that Cara Clinic had
  * forty conversations last week and two are waiting on a human; it does not mean
  * being able to read what a patient said. An operator who genuinely needs the
  * content of one thread should be asking the customer for access, and that
  * request should be visible to them.
  *
+ * The same rule covers secrets, which is the other thing a cross-tenant reader
+ * could trivially help itself to. A tenant's model credential is *spent*, not
+ * verified, so unlike a password it is decryptable — which makes "don't select
+ * it" the only thing standing between this console and a panel that hands an
+ * operator every customer's API key. `loadTenantDetail` therefore never selects
+ * `ModelProvider.apiKey` at all, not even to derive a last-four hint from it:
+ * the tenant's own settings page shows that hint to the person who pasted the
+ * key, and an operator is not that person. What the console gets instead is
+ * whether the key works, which is the only part of it anyone here can act on.
+ *
  * scripts/provePlatform.ts asserts this rather than trusting it: it seeds a
- * customer with a distinctive name and phone number and fails if either appears
- * in any rendered console page.
+ * customer with a distinctive name and phone number, and a model provider with
+ * a distinctive key, and fails if any of them appears in a rendered page.
  */
 
 const DAY = 86_400_000;
@@ -41,6 +53,45 @@ export type TenantRow = {
   escalations7d: number;
   approvedArticles: number;
   seats: number;
+  /** Model spend over the last 30 days. See the note on `UsageTotals`. */
+  usage30d: UsageTotals;
+  /** Whose key answers for this business, and whether it is currently working. */
+  key: KeySummary;
+};
+
+/**
+ * Tokens, and what they cost us.
+ *
+ * `costMicros` is null-aware on purpose: it sums only the rows we actually paid
+ * for. A tenant on their own key contributes tokens and no money, so a console
+ * showing "4.1M tokens · $0.00" against them is reporting the truth rather than
+ * failing to price something.
+ */
+export type UsageTotals = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  /** input + output + both cache columns. The headline number. */
+  total: number;
+  roundTrips: number;
+  /** USD micros, ours only. */
+  costMicros: number;
+  /** Tokens we spent but could not price — an unpriced model on our own key. */
+  unpricedTokens: number;
+};
+
+export type KeySummary = {
+  /** Whose bill a conversation lands on. No row at all means ours. */
+  source: "platform" | "tenant";
+  /** "enori's key", "their own DeepSeek key". Never a credential. */
+  label: string;
+  model: string | null;
+  /** Saved but switched off — they are back on ours without having deleted it. */
+  savedButInactive: boolean;
+  lastOkAt: Date | null;
+  lastFailureAt: Date | null;
+  lastFailureNote: string | null;
 };
 
 export type PlatformOverview = {
@@ -54,6 +105,18 @@ export type PlatformOverview = {
     escalations7d: number;
     /** Percentage of conversations that ended up with a human, 0–100. */
     escalationRate7d: number;
+  };
+  /** Model spend across every tenant, last 30 days. */
+  spend30d: {
+    all: UsageTotals;
+    /** What we paid for — the only part that is a bill. */
+    platform: UsageTotals;
+    /** What tenants paid for themselves. Volume we carry, money we don't. */
+    tenant: UsageTotals;
+    /** Businesses answering on their own credentials. */
+    onOwnKey: number;
+    /** True until the ledger has existed for the whole window. */
+    partialWindow: boolean;
   };
   attention: AttentionItem[];
 };
@@ -69,6 +132,164 @@ export type AttentionItem = {
   tenantName: string | null;
   what: string;
 };
+
+// ══════════════════════════════════════════════════════════════════════
+//  Model spend
+// ══════════════════════════════════════════════════════════════════════
+
+/**
+ * One row of the ledger, grouped. Deliberately grouped by model as well as by
+ * tenant and payer: "which business is expensive" and "which model made it
+ * expensive" are the same question asked twice, and one query answers both.
+ */
+type UsageGroup = {
+  tenantId: string;
+  source: string;
+  model: string;
+  kind?: string;
+  _sum: {
+    inputTokens: number | null;
+    outputTokens: number | null;
+    cacheReadTokens: number | null;
+    cacheWriteTokens: number | null;
+    roundTrips: number | null;
+    costMicros: number | null;
+  };
+};
+
+const USAGE_SUMS = {
+  inputTokens: true,
+  outputTokens: true,
+  cacheReadTokens: true,
+  cacheWriteTokens: true,
+  roundTrips: true,
+  costMicros: true,
+} as const;
+
+export const emptyUsageTotals = (): UsageTotals => ({
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  total: 0,
+  roundTrips: 0,
+  costMicros: 0,
+  unpricedTokens: 0,
+});
+
+/**
+ * Folds ledger groups into one set of totals.
+ *
+ * `unpricedTokens` is the number worth explaining: it counts tokens spent on
+ * *our* key against a model that `pricing.ts` has no rate for. That is not a
+ * tenant's problem and not a rounding error — it is a model somebody started
+ * using without adding it to the rate card, and the only way anyone finds out is
+ * if the console refuses to fold it silently into a total that looks complete.
+ */
+function foldUsage(groups: UsageGroup[]): UsageTotals {
+  const t = emptyUsageTotals();
+
+  for (const g of groups) {
+    const input = g._sum.inputTokens ?? 0;
+    const output = g._sum.outputTokens ?? 0;
+    const cacheRead = g._sum.cacheReadTokens ?? 0;
+    const cacheWrite = g._sum.cacheWriteTokens ?? 0;
+
+    t.input += input;
+    t.output += output;
+    t.cacheRead += cacheRead;
+    t.cacheWrite += cacheWrite;
+    t.roundTrips += g._sum.roundTrips ?? 0;
+    t.costMicros += g._sum.costMicros ?? 0;
+
+    if (g.source === "platform" && !rateFor(g.model)) {
+      t.unpricedTokens += input + output + cacheRead + cacheWrite;
+    }
+  }
+
+  t.total = t.input + t.output + t.cacheRead + t.cacheWrite;
+  return t;
+}
+
+/**
+ * Spend per model, keyed by model AND payer.
+ *
+ * Both halves of the key matter: the same model id run on our key and on a
+ * tenant's is two different bills, and merging them would price ours against
+ * tokens we never paid for.
+ */
+function groupBySourceAndModel(
+  groups: UsageGroup[],
+): { model: string; source: string; totals: UsageTotals }[] {
+  const buckets = new Map<string, UsageGroup[]>();
+  for (const g of groups) {
+    const k = `${g.source}:${g.model}`;
+    buckets.set(k, [...(buckets.get(k) ?? []), g]);
+  }
+
+  return [...buckets.values()]
+    .map((rows) => ({
+      model: rows[0].model,
+      source: rows[0].source,
+      totals: foldUsage(rows),
+    }))
+    .sort((a, b) => b.totals.total - a.totals.total);
+}
+
+/**
+ * Whose key answers, without ever touching the key.
+ *
+ * `apiKey` is absent from the select above rather than selected and discarded,
+ * so the ciphertext never enters this process. An operator learns that a
+ * business is on their own DeepSeek account and that it last worked on Tuesday;
+ * recovering the credential is not something this console can do for them.
+ */
+function summariseKey(
+  row: {
+    vendor: string;
+    model: string;
+    active: boolean;
+    lastOkAt: Date | null;
+    lastFailureAt: Date | null;
+    lastFailureNote: string | null;
+  } | null,
+): KeySummary {
+  // No row, or a row switched off, both mean the same thing at runtime: this
+  // tenant's conversations spend ours. See resolveProvider, which is the code
+  // this has to agree with.
+  if (!row || !row.active) {
+    return {
+      source: "platform",
+      label: "enori's key",
+      model: null,
+      savedButInactive: Boolean(row && !row.active),
+      lastOkAt: null,
+      lastFailureAt: null,
+      lastFailureNote: null,
+    };
+  }
+
+  return {
+    source: "tenant",
+    label: `their own ${findVendor(row.vendor)?.label ?? row.vendor} key`,
+    model: row.model,
+    savedButInactive: false,
+    lastOkAt: row.lastOkAt,
+    lastFailureAt: row.lastFailureAt,
+    lastFailureNote: row.lastFailureNote,
+  };
+}
+
+/** Never `apiKey`. See the module header. */
+const KEY_SELECT = {
+  tenantId: true,
+  vendor: true,
+  model: true,
+  active: true,
+  lastOkAt: true,
+  lastFailureAt: true,
+  lastFailureNote: true,
+} as const;
 
 export async function loadOverview(): Promise<PlatformOverview> {
   const since = new Date(Date.now() - 7 * DAY);
@@ -89,6 +310,11 @@ export async function loadOverview(): Promise<PlatformOverview> {
 
   // One grouped query per metric rather than N per tenant. Counts only — the
   // shape of these selects is itself part of the privacy guarantee.
+  // Spend is measured over thirty days, not seven. Seven days of model bills is
+  // a number that swings with one busy weekend; thirty is the shape of an
+  // invoice, which is the decision this figure actually informs.
+  const spendSince = new Date(Date.now() - 30 * DAY);
+
   const [
     conversations,
     escalated,
@@ -99,6 +325,9 @@ export async function loadOverview(): Promise<PlatformOverview> {
     locations,
     rules,
     services,
+    usage,
+    providers,
+    firstUsageEver,
   ] = await Promise.all([
     adminDb.conversation.groupBy({
       by: ["tenantId"],
@@ -132,12 +361,26 @@ export async function loadOverview(): Promise<PlatformOverview> {
       _count: { _all: true },
     }),
     adminDb.service.groupBy({ by: ["tenantId"], where: { active: true }, _count: { _all: true } }),
+    adminDb.modelUsage.groupBy({
+      by: ["tenantId", "source", "model"],
+      where: { createdAt: { gte: spendSince } },
+      _sum: USAGE_SUMS,
+    }),
+    adminDb.modelProvider.findMany({ select: KEY_SELECT }),
+    // The ledger only knows what it has been running long enough to see. Rather
+    // than let a freshly deployed console present an empty month as a cheap one,
+    // the page says the window is partial — and this is how it knows.
+    adminDb.modelUsage.findFirst({
+      orderBy: { createdAt: "asc" },
+      select: { createdAt: true },
+    }),
   ]);
 
   const count = (rows: { tenantId: string; _count: { _all: number } }[], id: string) =>
     rows.find((r) => r.tenantId === id)?._count._all ?? 0;
 
   const connected = new Set(channels.filter((c) => c.accessToken).map((c) => c.tenantId));
+  const providerByTenant = new Map(providers.map((p) => [p.tenantId, p]));
 
   const rows: TenantRow[] = tenants.map((t) => ({
     ...t,
@@ -151,6 +394,8 @@ export async function loadOverview(): Promise<PlatformOverview> {
     escalations7d: count(escalated, t.id),
     approvedArticles: count(approvedDocs, t.id),
     seats: count(users, t.id),
+    usage30d: foldUsage(usage.filter((u) => u.tenantId === t.id)),
+    key: summariseKey(providerByTenant.get(t.id) ?? null),
   }));
 
   const totalConversations = rows.reduce((n, r) => n + r.conversations7d, 0);
@@ -167,6 +412,13 @@ export async function loadOverview(): Promise<PlatformOverview> {
       escalations7d: totalEscalations,
       escalationRate7d:
         totalConversations === 0 ? 0 : Math.round((totalEscalations / totalConversations) * 100),
+    },
+    spend30d: {
+      all: foldUsage(usage),
+      platform: foldUsage(usage.filter((u) => u.source === "platform")),
+      tenant: foldUsage(usage.filter((u) => u.source === "tenant")),
+      onOwnKey: rows.filter((r) => r.key.source === "tenant").length,
+      partialWindow: !firstUsageEver || firstUsageEver.createdAt > spendSince,
     },
     attention: await loadAttention(rows),
   };
@@ -214,6 +466,19 @@ async function loadAttention(rows: TenantRow[]): Promise<AttentionItem[]> {
         tenantId: t.id,
         tenantName: t.name,
         what: "WhatsApp not connected, so customers cannot reach the assistant.",
+      });
+    }
+    // A business on its own key whose key has stopped working is the one failure
+    // here that is actively costing them customers as you read it: by design
+    // there is no fallback onto ours, so every thread is being handed to a
+    // colleague who may not be watching. They are told on their own settings
+    // page — this is so we find out before they complain.
+    if (t.key.source === "tenant" && t.key.lastFailureAt) {
+      items.push({
+        severity: "bad",
+        tenantId: t.id,
+        tenantName: t.name,
+        what: `Their own key is failing, so every thread goes to a person. ${t.key.lastFailureNote ?? ""}`.trim(),
       });
     }
   }
@@ -304,6 +569,9 @@ export async function loadTenantDetail(tenantId: string) {
     users,
     apiKeys,
     recentAudit,
+    usageGroups,
+    providerRow,
+    lifetime,
   ] = await Promise.all([
     adminDb.location.count({ where: { tenantId, active: true } }),
     adminDb.resource.count({ where: { tenantId, active: true } }),
@@ -362,6 +630,19 @@ export async function loadTenantDetail(tenantId: string) {
       take: 12,
       select: { id: true, action: true, actor: true, createdAt: true },
     }),
+    adminDb.modelUsage.groupBy({
+      by: ["tenantId", "source", "model", "kind"],
+      where: { tenantId, createdAt: { gte: since } },
+      _sum: USAGE_SUMS,
+    }),
+    // Never `apiKey`. See the module header — this is the select that guarantee
+    // actually lives in.
+    adminDb.modelProvider.findFirst({ where: { tenantId }, select: KEY_SELECT }),
+    adminDb.modelUsage.aggregate({
+      where: { tenantId },
+      _sum: { costMicros: true },
+      _min: { createdAt: true },
+    }),
   ]);
 
   return {
@@ -401,5 +682,22 @@ export async function loadTenantDetail(tenantId: string) {
     users,
     apiKeys,
     recentAudit,
+    key: summariseKey(providerRow),
+    spend: {
+      total30d: foldUsage(usageGroups),
+      /** Conversations and ingestion cost differently and are steered differently. */
+      byKind: ["conversation", "ingestion"].map((kind) => ({
+        kind,
+        totals: foldUsage(usageGroups.filter((g) => g.kind === kind)),
+      })),
+      /** Which model the money actually went to, biggest first. */
+      byModel: groupBySourceAndModel(usageGroups),
+      /**
+       * Everything they have ever cost us, not just this window. The number a
+       * conversation about an account actually starts from.
+       */
+      lifetimeCostMicros: lifetime._sum.costMicros ?? 0,
+      firstRecordedAt: lifetime._min.createdAt,
+    },
   };
 }

@@ -8,7 +8,7 @@ import { MODELS, resolveModel } from "@/lib/conversation/models";
  * Whose API key answers a customer, and how to speak to it.
  *
  * A business can bring its own — Claude, DeepSeek, whatever their infrastructure
- * team already pays for — or spend cadence's, which is what they get until they
+ * team already pays for — or spend enori's, which is what they get until they
  * decide otherwise. That choice is one row (`ModelProvider`), and its absence is
  * the default.
  *
@@ -64,7 +64,7 @@ export const VENDORS: Vendor[] = [
     keySource: "console.anthropic.com → API keys",
     keyPrefix: "sk-ant-",
     exampleModels: MODELS.map((m) => m.id),
-    note: "The same models cadence runs, billed to you instead of to us.",
+    note: "The same models enori runs, billed to you instead of to us.",
   },
   {
     id: "deepseek",
@@ -139,8 +139,15 @@ export function isKnownVendor(id: string): boolean {
 
 export type ResolvedProvider = {
   /** Whose money this turn spends. The only thing the agent branches on. */
-  source: "cadence" | "tenant";
+  source: "platform" | "tenant";
   protocol: Protocol;
+  /**
+   * Which vendor this resolved to, for attribution only — nothing branches on
+   * it, exactly as on the stored row. It rides along here so the usage ledger
+   * can say *what* was billed without re-reading the provider row it was just
+   * resolved from.
+   */
+  vendor: string;
   apiKey: string;
   /** Null means the protocol's default host. */
   baseUrl: string | null;
@@ -213,16 +220,16 @@ export function isProviderFailure(err: unknown): err is ProviderFailure {
  * A function rather than three lines inside the agent because this is the rule
  * the whole feature turns on, and it is worth being able to assert directly:
  * `scripts/proveModelProviders.ts` checks every combination, including the one
- * that must never happen — cadence's own key pausing a tenant's threads.
+ * that must never happen — enori's own key pausing a tenant's threads.
  */
 export function failureResponse(
-  source: "cadence" | "tenant",
+  source: "platform" | "tenant",
   kind: "credential" | "transient",
 ): "retry" | "escalate" {
   // Our own key failing is our incident, not theirs. Pausing every tenant's
   // threads over it would turn a ten-minute outage into a day of manual inbox
   // work for every customer, each one needing a person to hand the thread back.
-  if (source === "cadence") return "retry";
+  if (source === "platform") return "retry";
   return kind === "credential" ? "escalate" : "retry";
 }
 
@@ -348,6 +355,7 @@ export async function resolveProvider(
     return {
       source: "tenant",
       protocol: row.protocol === "anthropic" ? "anthropic" : "openai",
+      vendor: row.vendor,
       apiKey: decrypt(row.apiKey),
       baseUrl: row.baseUrl,
       model: row.model,
@@ -368,19 +376,20 @@ export async function resolveProvider(
   if (!env.ANTHROPIC_API_KEY) {
     throw new CadenceError(
       "capability_unavailable",
-      "No model is configured — cadence has no platform key and this business has not added its own.",
+      "No model is configured — enori has no platform key and this business has not added its own.",
     );
   }
 
   const { model, effort } = resolveModel(tenant);
   return {
-    source: "cadence",
+    source: "platform",
     protocol: "anthropic",
+    vendor: "anthropic",
     apiKey: env.ANTHROPIC_API_KEY,
     baseUrl: null,
     model,
     effort,
-    label: "cadence's key",
+    label: "enori's key",
   };
 }
 
@@ -463,8 +472,8 @@ export function chatCompletionsUrl(baseUrl: string): string {
 /**
  * Whether this is somewhere we are willing to send a request, and why not.
  *
- * The endpoint a tenant types is fetched by cadence's own server, from inside
- * cadence's own network. That makes the box on the settings page a
+ * The endpoint a tenant types is fetched by enori's own server, from inside
+ * enori's own network. That makes the box on the settings page a
  * server-side-request primitive unless something says otherwise, and the classic
  * target is one hop away: `http://169.254.169.254/` is the cloud metadata
  * service on every major host, and it answers to anyone who can reach it.
@@ -472,7 +481,7 @@ export function chatCompletionsUrl(baseUrl: string): string {
  * So: https only, and no addresses that are private by construction. A business
  * that genuinely runs its own model inside the same network sets
  * CADENCE_ALLOW_PRIVATE_MODEL_ENDPOINTS — a deployment-level decision, made by
- * whoever operates cadence, not by a tenant typing in a form.
+ * whoever operates enori, not by a tenant typing in a form.
  *
  * Returns a sentence to show a person, or null when the address is fine.
  *
@@ -509,7 +518,7 @@ export function unsafeEndpointReason(raw: string): string | null {
     return "That address is internal to a private network and cannot be used here.";
   }
   if (isPrivateAddress(host)) {
-    return "That is a private network address. Use the provider's public endpoint, or ask whoever runs this cadence deployment to allow private endpoints.";
+    return "That is a private network address. Use the provider's public endpoint, or ask whoever runs this enori deployment to allow private endpoints.";
   }
   return null;
 }

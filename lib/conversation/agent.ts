@@ -64,10 +64,20 @@ export type AgentTurn = {
    * tool call adds a round trip, and every round trip re-sends the whole prompt.
    */
   roundTrips?: number;
+  /**
+   * Which key answered, and as what.
+   *
+   * Carried out of the turn rather than looked up again by whoever records the
+   * spend, because between the turn and the write a business can switch keys —
+   * and re-reading the row would then bill an Anthropic turn to the DeepSeek
+   * account they moved to a second later. No secret rides along; this is the
+   * provider's identity, not its credential.
+   */
+  provider?: { source: "platform" | "tenant"; protocol: string; vendor: string; model: string };
 };
 
 /**
- * Whether cadence's own key is present.
+ * Whether enori's own key is present.
  *
  * Narrower than it looks, and deliberately so: a tenant that has brought its own
  * key answers customers whether or not this is true. It is the platform default
@@ -126,7 +136,7 @@ export async function runAgentTurn(
   // Whose key answers this message, and on which protocol.
   //
   // A business that has added its own runs on it; everyone else runs on
-  // cadence's, with the model and effort they chose on Settings → Agent. Effort
+  // enori's, with the model and effort they chose on Settings → Agent. Effort
   // is the main cost lever on a channel that may carry thousands of messages a
   // day, so it is theirs to spend — and it is omitted entirely for models that
   // do not accept it.
@@ -194,6 +204,12 @@ export async function runAgentTurn(
     toolCalls,
     usage,
     roundTrips,
+    provider: {
+      source: provider.source,
+      protocol: provider.protocol,
+      vendor: provider.vendor,
+      model: provider.model,
+    },
   };
 }
 
@@ -216,7 +232,7 @@ export async function runAgentTurn(
  * business's behalf — the assistant has nothing approved to say about its own
  * billing arrangements.
  *
- * cadence's own key never lands here: an outage on our side is ours to fix and
+ * enori's own key never lands here: an outage on our side is ours to fix and
  * ours to be paged about, and pausing every tenant's threads over it would turn
  * a ten-minute incident into a day of manual inbox work for every customer.
  */

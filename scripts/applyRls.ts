@@ -52,6 +52,7 @@ const TENANT_SCOPED_TABLES = [
   "ImportRun",
   "ChannelAccount",
   "ModelProvider",
+  "ModelUsage",
   "IdempotencyRecord",
   "WebhookEndpoint",
   "WebhookDelivery",

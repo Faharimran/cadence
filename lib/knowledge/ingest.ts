@@ -9,6 +9,8 @@ import { redis } from "@/lib/redis";
 import { extractPdf, type ExtractedPage } from "./extract";
 import { chunkPages, type Chunk } from "./chunk";
 import { crawlSite, normaliseSiteUrl, WebSourceError, type CrawlResult } from "./web";
+import { recordModelUsage } from "@/lib/conversation/usage";
+import type { TokenCounts } from "@/lib/conversation/pricing";
 
 /**
  * Turning an uploaded document into articles a person can approve.
@@ -247,7 +249,21 @@ async function ingestPages(
     return { status: "failed", chunkCount: 0, failureNote: note };
   }
 
-  const titled = await titleChunks(chunks, source.filename);
+  const { titles: titled, usage } = await titleChunks(chunks, source.filename);
+
+  // Ingestion is always ours to pay for, so it is always priced. Recorded here
+  // rather than inside titleChunks so that the one function that talks to a
+  // model stays a function that talks to a model.
+  await recordModelUsage(db, {
+    tenantId: args.tenantId,
+    kind: "ingestion",
+    source: "platform",
+    protocol: "anthropic",
+    vendor: "anthropic",
+    model: MODEL,
+    tokens: usage,
+    roundTrips: Math.ceil(chunks.length / BATCH_SIZE),
+  });
 
   let created = 0;
   for (const item of titled) {
@@ -300,8 +316,14 @@ async function ingestPages(
 async function titleChunks(
   chunks: Chunk[],
   filename: string,
-): Promise<{ index: number; title: string; tags: string[] }[]> {
-  if (!env.ANTHROPIC_API_KEY) return chunks.map(fallbackTitle);
+): Promise<{ titles: { index: number; title: string; tags: string[] }[]; usage: TokenCounts }> {
+  // Every batch below is billed to enori's key, whatever the tenant answers
+  // customers on — ingestion deliberately never runs on a tenant's credential.
+  // Accumulated across batches because a long document is many calls, and
+  // reporting only the last one is how a fifty-page upload books as one.
+  const usage: TokenCounts = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+
+  if (!env.ANTHROPIC_API_KEY) return { titles: chunks.map(fallbackTitle), usage };
 
   const out: { index: number; title: string; tags: string[] }[] = [];
 
@@ -331,6 +353,12 @@ async function titleChunks(
         ],
       });
 
+      const u = response.usage;
+      usage.input += u?.input_tokens ?? 0;
+      usage.output += u?.output_tokens ?? 0;
+      usage.cacheRead += u?.cache_read_input_tokens ?? 0;
+      usage.cacheWrite += u?.cache_creation_input_tokens ?? 0;
+
       const parsed = response.parsed_output;
       if (!parsed) throw new Error("no parsed output");
 
@@ -349,7 +377,7 @@ async function titleChunks(
     }
   }
 
-  return out;
+  return { titles: out, usage };
 }
 
 function fallbackTitle(chunk: Chunk): { index: number; title: string; tags: string[] } {

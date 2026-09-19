@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireOperator } from "@/lib/platform/guard";
 import { loadOverview } from "@/lib/platform/metrics";
 import { Empty, PageHeader, Pill, Row, Section } from "../admin/ui";
+import { formatTokens, formatUsd } from "@/lib/conversation/pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function PlatformOverview() {
   await requireOperator();
-  const { tenants, totals, attention } = await loadOverview();
+  const { tenants, totals, attention, spend30d } = await loadOverview();
 
   return (
     <div className="flex flex-col gap-10">
@@ -68,16 +69,80 @@ export default async function PlatformOverview() {
         </div>
       </Section>
 
+      {/* ── What the models cost ───────────────────────────────────── */}
+      <Section title="Model spend · last thirty days">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric
+            label="Our bill"
+            value={formatUsd(spend30d.platform.costMicros)}
+            note={`${formatTokens(spend30d.platform.total)} tokens on enori's key`}
+          />
+          <Metric
+            label="On their own keys"
+            value={formatTokens(spend30d.tenant.total)}
+            // Never a dollar figure. We do not pay for these and have never seen
+            // the rate card they are billed at — printing one would be fiction.
+            note={
+              spend30d.onOwnKey === 1
+                ? "1 business, billed to them"
+                : `${spend30d.onOwnKey} businesses, billed to them`
+            }
+          />
+          <Metric
+            label="Cache reads"
+            value={formatTokens(spend30d.all.cacheRead)}
+            // The lever, stated as a share. A prompt that stops being cached
+            // does not look like an error anywhere else — it looks like a bill.
+            note={
+              spend30d.all.total > 0
+                ? `${Math.round((spend30d.all.cacheRead / spend30d.all.total) * 100)}% of all tokens, at a tenth of the price`
+                : "nothing cached yet"
+            }
+          />
+          <Metric
+            label="Model calls"
+            value={spend30d.all.roundTrips}
+            note="each one re-sends the whole prompt"
+          />
+        </div>
+
+        {spend30d.partialWindow && (
+          <p className="text-[11px] text-ink-3">
+            The ledger starts when this was deployed, so anything before that is
+            missing rather than zero.
+          </p>
+        )}
+        {spend30d.platform.unpricedTokens > 0 && (
+          <p className="text-[11px] text-warn">
+            {formatTokens(spend30d.platform.unpricedTokens)} tokens ran on our key against a
+            model with no entry in <span className="font-mono">lib/conversation/pricing.ts</span>,
+            so they are counted but not costed. The bill above is short by whatever they came to.
+          </p>
+        )}
+      </Section>
+
       {/* ── The roster ─────────────────────────────────────────────── */}
       <Section title="Businesses">
         {tenants.length === 0 ? (
           <Empty>Nobody has signed up yet.</Empty>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[52rem] border-collapse text-sm">
+            <table className="w-full min-w-[72rem] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-rule text-left">
-                  {["Business", "Trade", "Set up", "WhatsApp", "Articles", "Convos", "Bookings", "Joined"].map(
+                  {[
+                    "Business",
+                    "Trade",
+                    "Set up",
+                    "WhatsApp",
+                    "Whose key",
+                    "Articles",
+                    "Convos",
+                    "Bookings",
+                    "Tokens 30d",
+                    "Cost 30d",
+                    "Joined",
+                  ].map(
                     (h) => (
                       <th
                         key={h}
@@ -119,6 +184,19 @@ export default async function PlatformOverview() {
                         <span className="text-ink-3">—</span>
                       )}
                     </td>
+                    <td className="px-3 py-2.5">
+                      {t.key.source === "tenant" ? (
+                        t.key.lastFailureAt ? (
+                          <Pill tone="bad">their key failing</Pill>
+                        ) : (
+                          <Pill tone="ok">own key</Pill>
+                        )
+                      ) : (
+                        <span className="text-[11px] text-ink-3">
+                          ours{t.key.savedButInactive && " (theirs saved, off)"}
+                        </span>
+                      )}
+                    </td>
                     <td className="num px-3 py-2.5 text-right">
                       {t.approvedArticles || <span className="text-ink-3">0</span>}
                     </td>
@@ -129,6 +207,26 @@ export default async function PlatformOverview() {
                       )}
                     </td>
                     <td className="num px-3 py-2.5 text-right">{t.bookings7d}</td>
+                    <td className="num px-3 py-2.5 text-right">
+                      {t.usage30d.total > 0 ? (
+                        formatTokens(t.usage30d.total)
+                      ) : (
+                        <span className="text-ink-3">—</span>
+                      )}
+                    </td>
+                    <td className="num px-3 py-2.5 text-right">
+                      {t.key.source === "tenant" ? (
+                        // Their key, their bill. An em dash rather than $0.00,
+                        // which would read as a business that costs nothing.
+                        <span className="text-ink-3" title="billed to them, not to us">
+                          theirs
+                        </span>
+                      ) : t.usage30d.costMicros > 0 ? (
+                        formatUsd(t.usage30d.costMicros)
+                      ) : (
+                        <span className="text-ink-3">—</span>
+                      )}
+                    </td>
                     <td className="num whitespace-nowrap px-3 py-2.5 text-[11px] text-ink-3">
                       {t.createdAt.toISOString().slice(0, 10)}
                     </td>

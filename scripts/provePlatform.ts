@@ -25,6 +25,7 @@ import { mintPlatformToken, PLATFORM_COOKIE } from "@/lib/platform/session";
 import { readPlatformTokenValue } from "@/lib/platform/session";
 import { readTokenValue } from "@/lib/auth/session";
 import { loadOverview, loadTenantDetail } from "@/lib/platform/metrics";
+import { encrypt } from "@/lib/crypto";
 
 const BASE = process.env.CADENCE_TEST_URL ?? "http://localhost:3111";
 
@@ -44,6 +45,8 @@ function check(label: string, ok: boolean, detail?: string) {
 const PROBE_NAME = "Zylquist Verrandean";
 const PROBE_PHONE = "+919812340077";
 const PROBE_MESSAGE = "my qwyzzle is throbbing rather badly";
+/** A credential the console must be able to report on without ever showing. */
+const PROBE_KEY = "sk-ant-zzqwrvblurgh-9912-DO-NOT-RENDER";
 
 async function get(path: string, cookies: Record<string, string> = {}) {
   const cookie = Object.entries(cookies)
@@ -193,7 +196,7 @@ async function main() {
     // console does not leak names" from staying green on a screen that never
     // rendered — which is exactly what happened on the first run of this file.
     for (const [where, page] of [["overview", overview], ["tenant page", detail]] as const) {
-      const rendered = page.status === 200 && page.body.includes("cadence");
+      const rendered = page.status === 200 && page.body.includes("enori");
       check(`the ${where} actually rendered`, rendered, `HTTP ${page.status}`);
       check(
         `the ${where} does not show the customer's name`,
@@ -229,6 +232,98 @@ async function main() {
     } else {
       check("nor a channel access token (none stored to check)", true);
     }
+  }
+
+  // ── 3b. It can report on a key without showing it ───────────────────
+  //
+  // The console has to answer "whose key, and is it working" — which means it
+  // reads the row the credential lives on. That makes this the most plausible
+  // accidental leak in the product: one `select` widened to `true` and every
+  // operator can read every tenant's API key.
+  //
+  // So the assertion is made from both ends: the spend has to be VISIBLE (or a
+  // page that renders none of it would pass for the wrong reason) and the key
+  // has to be ABSENT, in plaintext and as stored ciphertext alike.
+  console.log("\n3b. Reporting on a credential without exposing it");
+  {
+    // This script is re-run against the same seeded tenant, and the ledger is
+    // append-only — so without this the totals asserted below grow by 4,666 on
+    // every run and the assertion is green exactly once.
+    await adminDb.modelUsage.deleteMany({ where: { tenantId: cara.id } });
+
+    const ciphertext = encrypt(PROBE_KEY);
+    await adminDb.modelProvider.upsert({
+      where: { tenantId: cara.id },
+      create: {
+        tenantId: cara.id,
+        protocol: "anthropic",
+        vendor: "anthropic",
+        apiKey: ciphertext,
+        model: "claude-sonnet-5",
+        active: true,
+      },
+      update: { apiKey: ciphertext, active: true },
+    });
+
+    await adminDb.modelUsage.create({
+      data: {
+        tenantId: cara.id,
+        kind: "conversation",
+        source: "tenant",
+        protocol: "anthropic",
+        vendor: "anthropic",
+        model: "claude-sonnet-5",
+        inputTokens: 4_242,
+        outputTokens: 424,
+        roundTrips: 2,
+      },
+    });
+
+    const overview = await get("/platform", { [PLATFORM_COOKIE]: operatorCookie });
+    const detail = await get(`/platform/tenants/${cara.id}`, {
+      [PLATFORM_COOKIE]: operatorCookie,
+    });
+
+    const rendered =
+      overview.status === 200 &&
+      detail.status === 200 &&
+      detail.body.includes("Cara Clinic");
+    check("both console pages rendered", rendered, `${overview.status}/${detail.status}`);
+
+    // Positive first: without these, "no key on the page" is satisfied by a
+    // page with nothing on it.
+    check(
+      "the console says whose key answers",
+      rendered && /their own/i.test(detail.body),
+    );
+    check("and reports the spend it recorded", rendered && /4\.7k|4,666|4666/.test(detail.body));
+
+    // And now the negative, which is the one that matters.
+    for (const [where, page] of [["overview", overview], ["tenant page", detail]] as const) {
+      check(
+        `the ${where} does not show the key`,
+        rendered && !page.body.includes(PROBE_KEY),
+      );
+      check(
+        `the ${where} does not show its ciphertext either`,
+        rendered && !page.body.includes(ciphertext),
+      );
+    }
+
+    const serialised = JSON.stringify([await loadOverview(), await loadTenantDetail(cara.id)]);
+    check(
+      "and the metrics layer never loads the credential at all",
+      !serialised.includes(PROBE_KEY) && !serialised.includes(ciphertext),
+    );
+
+    // A tenant's own key is not our bill, and the console must not invent a
+    // price for tokens billed to somebody else's account.
+    const detailData = await loadTenantDetail(cara.id);
+    check(
+      "and prices nothing against their own key",
+      detailData?.spend.total30d.costMicros === 0,
+      String(detailData?.spend.total30d.costMicros),
+    );
   }
 
   // ── 4. Only an admin may act ────────────────────────────────────────

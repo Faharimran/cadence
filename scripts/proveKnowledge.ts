@@ -735,6 +735,19 @@ async function main() {
         data: { tenantId: t, sourceId: src.id, title, body: `Body of ${title}`, tags, status },
       });
 
+    // These titles are fixed, and `(tenantId, title)` is unique — so without
+    // this the fixture collides with its own leftovers and the whole file dies
+    // on a P2002 the second time anyone runs it. The source row above sidesteps
+    // that with a timestamped checksum; the articles never did, which made this
+    // script green exactly once per database.
+    const PROBE_TITLES = [
+      "Where do I park?",
+      "Is parking free?",
+      "Old parking rules",
+      "What does it cost?",
+    ];
+    await adminDb.knowledgeDoc.deleteMany({ where: { tenantId: t, title: { in: PROBE_TITLES } } });
+
     const a = await make("Where do I park?", ["parking"], "draft");
     const b = await make("Is parking free?", ["parking"], "draft");
     const retired = await make("Old parking rules", ["parking"], "archived");

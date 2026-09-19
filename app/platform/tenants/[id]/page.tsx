@@ -3,6 +3,7 @@ import { requireOperator } from "@/lib/platform/guard";
 import { loadTenantDetail } from "@/lib/platform/metrics";
 import { setTenantStatus } from "../../actions";
 import { BackLink, Button, Empty, PageHeader, Pill, Row, Section } from "../../../admin/ui";
+import { formatTokens, formatUsd } from "@/lib/conversation/pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ export default async function TenantDetailPage({
   const detail = await loadTenantDetail(id);
   if (!detail) notFound();
 
-  const { tenant, setup, ready, volume, knowledge, sources, channel, endpoints, capabilities, users, apiKeys, recentAudit, failedDeliveries } =
+  const { tenant, setup, ready, volume, knowledge, sources, channel, endpoints, capabilities, users, apiKeys, recentAudit, failedDeliveries, key, spend } =
     detail;
 
   const bookingsByStatus = volume.bookings30d
@@ -117,6 +118,107 @@ export default async function TenantDetailPage({
             ))}
           </ul>
         )}
+      </Section>
+
+      {/* ── Whose key, and what it spent ───────────────────────────── */}
+      <Section title="Model">
+        <ul className="flex flex-col gap-2">
+          <Row>
+            <span className="num text-sm font-semibold">Answering on</span>
+            <span className="text-sm text-ink-2">{key.label}</span>
+            {key.source === "tenant" ? (
+              key.lastFailureAt ? (
+                <Pill tone="bad">failing</Pill>
+              ) : (
+                <Pill tone="ok">working</Pill>
+              )
+            ) : key.savedButInactive ? (
+              <Pill tone="warn">theirs saved, switched off</Pill>
+            ) : null}
+            {key.model && <span className="num ml-auto text-[11px] text-ink-3">{key.model}</span>}
+          </Row>
+
+          {key.source === "tenant" && (
+            <Row>
+              <span className="num text-sm font-semibold">Last seen</span>
+              <span className="text-xs text-ink-2">
+                {key.lastOkAt
+                  ? `worked ${key.lastOkAt.toISOString().slice(0, 16).replace("T", " ")}`
+                  : "never yet seen to work"}
+              </span>
+              {key.lastFailureNote && (
+                <span className="text-xs text-bad">{key.lastFailureNote}</span>
+              )}
+            </Row>
+          )}
+        </ul>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="Tokens · 30 days" value={formatTokens(spend.total30d.total)} />
+          <Metric
+            label="Cost · 30 days"
+            value={
+              key.source === "tenant" ? "billed to them" : formatUsd(spend.total30d.costMicros)
+            }
+            note={key.source === "tenant" ? "their key, their rate card" : undefined}
+          />
+          <Metric
+            label="Cached"
+            value={
+              spend.total30d.total > 0
+                ? `${Math.round((spend.total30d.cacheRead / spend.total30d.total) * 100)}%`
+                : "—"
+            }
+            note="of tokens, at a tenth of the price"
+          />
+          <Metric
+            label="Cost · all time"
+            value={
+              // Ours only, and it stays ours even if they switch to their own
+              // key tomorrow: the rows already written were our bill.
+              spend.lifetimeCostMicros > 0 ? formatUsd(spend.lifetimeCostMicros) : "—"
+            }
+            note={
+              spend.firstRecordedAt
+                ? `since ${spend.firstRecordedAt.toISOString().slice(0, 10)}`
+                : "nothing recorded yet"
+            }
+          />
+        </div>
+
+        {spend.byModel.length === 0 ? (
+          <Empty>No model call recorded in the last thirty days.</Empty>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {spend.byModel.map((m) => (
+              <Row key={`${m.source}:${m.model}`}>
+                <span className="num text-sm font-semibold">{m.model}</span>
+                <span className="text-[11px] text-ink-3">
+                  {m.source === "platform" ? "our key" : "their key"}
+                </span>
+                <span className="num ml-auto text-xs text-ink-2">
+                  {formatTokens(m.totals.total)} tokens
+                  {m.source === "platform" && m.totals.costMicros > 0 && (
+                    <> · {formatUsd(m.totals.costMicros)}</>
+                  )}
+                </span>
+              </Row>
+            ))}
+          </ul>
+        )}
+
+        <p className="text-[11px] text-ink-3">
+          {spend.byKind
+            .filter((k) => k.totals.total > 0)
+            .map((k) => `${formatTokens(k.totals.total)} on ${k.kind}`)
+            .join(" · ") || "Nothing spent yet."}
+          {" — ingestion always runs on enori's key, whatever they answer customers on."}
+        </p>
+
+        <p className="text-[11px] text-ink-3">
+          The credential itself is never loaded here, not even to show its last four
+          characters. Whether it works is the only part of it an operator can act on.
+        </p>
       </Section>
 
       {/* ── Plumbing ───────────────────────────────────────────────── */}

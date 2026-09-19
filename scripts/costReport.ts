@@ -24,17 +24,18 @@ import { buildTools, type ToolContext } from "@/lib/conversation/tools";
 import { systemPrompt } from "@/lib/conversation/agent";
 import { buildKnowledgeContext } from "@/lib/knowledge";
 import { MODELS } from "@/lib/conversation/models";
+import {
+  PRICING,
+  CACHE_READ_MULTIPLIER,
+  CACHE_WRITE_MULTIPLIER,
+} from "@/lib/conversation/pricing";
 
-/** USD per million tokens. */
-const PRICING: Record<string, { input: number; output: number }> = {
-  "claude-opus-5": { input: 5, output: 25 },
-  "claude-sonnet-5": { input: 3, output: 15 },
-  "claude-haiku-4-5": { input: 1, output: 5 },
-};
-
-const CACHE_READ = 0.1; // ×input
-const WRITE_5MIN = 1.25; // ×input
-const WRITE_1HOUR = 2.0; // ×input
+// The rate card lives in lib/conversation/pricing.ts, because the operator
+// console prices live usage from it too and two copies of a price list is one
+// price list and one stale number.
+const CACHE_READ = CACHE_READ_MULTIPLIER; // ×input
+const WRITE_5MIN = CACHE_WRITE_MULTIPLIER; // ×input
+const WRITE_1HOUR = 2.0; // ×input — the longer TTL, priced only by this report
 
 /**
  * How long a customer takes to reply.
