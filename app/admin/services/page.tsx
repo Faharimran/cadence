@@ -2,20 +2,13 @@ import { requireUser, asTenant } from "@/lib/auth/guard";
 import { toggleService, togglePriceQuotable } from "./actions";
 import { ServiceForm } from "./ServiceForm";
 import { Button, Empty, PageHeader, Pill, Row, Section } from "../ui";
+import { formatMoney } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
+/** Null stays null: "price on request" is a real state, not a zero. */
 function money(minor: number | null, currency: string): string | null {
-  if (minor === null) return null;
-  try {
-    return new Intl.NumberFormat("en", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: 2,
-    }).format(minor / 100);
-  } catch {
-    return `${(minor / 100).toFixed(2)} ${currency}`;
-  }
+  return minor === null ? null : formatMoney(minor, currency);
 }
 
 export default async function ServicesPage() {

@@ -79,7 +79,29 @@ export function priceMicros(
   tokens: TokenCounts,
 ): number | null {
   if (source !== "platform") return null;
+  return estimateMicros(model, tokens);
+}
 
+/**
+ * What this many tokens would cost at list price, whoever paid.
+ *
+ * The difference from `priceMicros` is *whose question it answers*, and it is
+ * worth keeping the two apart. `priceMicros` decides what goes in the ledger:
+ * our bill, and null for anything we did not pay, because a stored number that
+ * we invented is indistinguishable later from one we were charged.
+ *
+ * This one is for showing a business what their own key is costing *them* — a
+ * question they are entitled to ask and we can only estimate. It is right when
+ * they run a standard Anthropic account, because this table is Anthropic's
+ * published rate card; it is wrong if they negotiated a discount, and it returns
+ * null rather than guessing for DeepSeek, Groq or anything self-hosted, whose
+ * prices we have never seen.
+ *
+ * Anything rendered from this must say "estimated" beside it. A figure a
+ * business might reconcile against a real invoice has to admit which of the two
+ * it is.
+ */
+export function estimateMicros(model: string, tokens: TokenCounts): number | null {
   const rate = rateFor(model);
   if (!rate) return null;
 

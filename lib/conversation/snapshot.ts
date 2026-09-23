@@ -3,6 +3,7 @@ import type { TenantDb } from "@/lib/prisma";
 import { redis } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 import type { CapabilitySet } from "@/lib/conversation/capabilities";
+import { formatMoney } from "@/lib/money";
 
 /**
  * A per-conversation cache of the slow, stable things the agent needs to talk:
@@ -225,18 +226,6 @@ async function loadOffers(db: TenantDb, tenantId: string): Promise<OfferSummary[
   }));
 }
 
-function formatMoney(minor: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("en", {
-      style: "currency",
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(minor / 100);
-  } catch {
-    return `${(minor / 100).toFixed(2)} ${currency}`;
-  }
-}
 
 // ══════════════════════════════════════════════════════════════════════
 //  Redis

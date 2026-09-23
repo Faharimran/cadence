@@ -27,6 +27,7 @@ const NAV: NavSection[] = [
       { href: "/admin", label: "Today", exact: true },
       { href: "/admin/conversations", label: "Conversations" },
       { href: "/admin/bookings", label: "Bookings" },
+      { href: "/admin/performance", label: "How you're doing" },
     ],
   },
   {
